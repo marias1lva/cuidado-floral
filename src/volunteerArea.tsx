@@ -1,4 +1,4 @@
-import { useState, type ElementType } from "react";
+import { useEffect, useState, type ElementType } from "react";
 import {
   Search, Filter, Eye, Send, CheckCircle,
   Clock, Heart, Phone, Mail, MapPin,
@@ -14,6 +14,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
+import {
+  initialVolunteerHours,
+  volunteerAgenda,
+} from "./volunteer-hours/constants";
+import {
+  VolunteerAreaTabs,
+  type VolunteerAreaTab,
+} from "./volunteer-area-tabs";
+import { VolunteerAgenda } from "./volunteer-hours/volunteer-agenda";
+import { VolunteerHoursList } from "./volunteer-hours/volunteer-hours-list";
+import { VolunteerHoursModal } from "./volunteer-hours/volunteer-hours-modal";
+import type { VolunteerHourEntry } from "./volunteer-hours/types";
 
 type Status = "pendente" | "encaminhado" | "concluído";
 type Priority = "alta" | "média" | "baixa";
@@ -112,10 +124,29 @@ export function VolunteerArea() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [patientList, setPatientList] = useState<Patient[]>(initialPatients);
+  const [activeTab, setActiveTab] = useState<VolunteerAreaTab>("patients");
+  const [isHoursModalOpen, setIsHoursModalOpen] = useState(false);
+  const [volunteerHours, setVolunteerHours] = useState<VolunteerHourEntry[]>(() => {
+    if (typeof window === "undefined") {
+      return initialVolunteerHours;
+    }
+
+    const savedEntries = window.localStorage.getItem("volunteer-hours");
+    if (!savedEntries) {
+      return initialVolunteerHours;
+    }
+
+    try {
+      return JSON.parse(savedEntries) as VolunteerHourEntry[];
+    } catch {
+      return initialVolunteerHours;
+    }
+  });
 
   const pendingCount   = patientList.filter((p) => p.status === "pendente").length;
   const forwardedCount = patientList.filter((p) => p.status === "encaminhado").length;
   const completedCount = patientList.filter((p) => p.status === "concluído").length;
+  const totalHours = volunteerHours.reduce((sum, entry) => sum + entry.hours, 0);
 
   const filtered = patientList.filter((p) => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase());
@@ -135,9 +166,14 @@ export function VolunteerArea() {
     );
   }
 
-  function handleRegisterHours() {
-    // TODO: trocar pelo navigate() quando a página do colega estiver pronta
-    alert("Navegar para página de cadastro de horas");
+  useEffect(() => {
+    window.localStorage.setItem("volunteer-hours", JSON.stringify(volunteerHours));
+  }, [volunteerHours]);
+
+  function handleRegisterHours(entry: VolunteerHourEntry) {
+    setVolunteerHours((current) =>
+      [entry, ...current].sort((a, b) => b.date.localeCompare(a.date)),
+    );
   }
 
   return (
@@ -188,165 +224,195 @@ export function VolunteerArea() {
               Área da Voluntária
             </h1>
             <p className="text-sm text-[var(--muted-foreground)]">
-              Gerencie pacientes e faça encaminhamentos para atendimento
+              Gerencie pacientes, encaminhamentos e atividades de voluntariado
             </p>
           </div>
-          <Button
-            onClick={handleRegisterHours}
-            className="flex items-center gap-2 rounded-full bg-[var(--primary)] hover:bg-[var(--primary)]/90 text-white shadow-md shadow-pink-200 shrink-0"
-          >
-            <Calendar size={15} />
-            Cadastrar horas de voluntariado
-          </Button>
+          {activeTab === "hours" && (
+            <Button
+              onClick={() => setIsHoursModalOpen(true)}
+              className="flex items-center gap-2 rounded-full bg-[var(--primary)] hover:bg-[var(--primary)]/90 text-white shadow-md shadow-pink-200 shrink-0"
+            >
+              <Calendar size={15} />
+              Cadastrar horas de voluntariado
+            </Button>
+          )}
         </div>
 
-        {/* ── Stats cards ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-          <div className="bg-white rounded-xl border border-[var(--border)] p-5">
-            <div className="flex items-center justify-between mb-4">
-              <span className="font-medium text-sm">Pendentes</span>
-              <div className="w-10 h-10 rounded-lg bg-yellow-100 flex items-center justify-center">
-                <Clock size={18} className="text-yellow-600" />
+        <VolunteerAreaTabs activeTab={activeTab} onChange={setActiveTab} />
+
+        {activeTab === "hours" ? (
+          <div className="mb-8 rounded-3xl border border-pink-100 bg-white p-6 shadow-sm shadow-pink-100/40">
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-[var(--primary)]">
+                  Registro de atividades de voluntariado
+                </h2>
+                <p className="text-sm text-[var(--muted-foreground)]">
+                  Consulte a agenda e registre as horas realizadas pela voluntária.
+                </p>
               </div>
-            </div>
-            <p className="text-2xl font-semibold text-yellow-600">{pendingCount}</p>
-            <p className="text-xs text-[var(--muted-foreground)] mt-0.5">Aguardando análise</p>
-          </div>
-
-          <div className="bg-white rounded-xl border border-[var(--border)] p-5">
-            <div className="flex items-center justify-between mb-4">
-              <span className="font-medium text-sm">Encaminhados</span>
-              <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                <Send size={18} className="text-blue-600" />
-              </div>
-            </div>
-            <p className="text-2xl font-semibold text-blue-600">{forwardedCount}</p>
-            <p className="text-xs text-[var(--muted-foreground)] mt-0.5">Em atendimento</p>
-          </div>
-
-          <div className="bg-white rounded-xl border border-[var(--border)] p-5">
-            <div className="flex items-center justify-between mb-4">
-              <span className="font-medium text-sm">Concluídos</span>
-              <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
-                <CheckCircle size={18} className="text-green-600" />
-              </div>
-            </div>
-            <p className="text-2xl font-semibold text-green-600">{completedCount}</p>
-            <p className="text-xs text-[var(--muted-foreground)] mt-0.5">Finalizados</p>
-          </div>
-        </div>
-
-        {/* ── Patient list ── */}
-        <div className="bg-white rounded-xl border border-[var(--border)] p-6">
-          <div className="mb-4">
-            <h2 className="text-base font-semibold text-[var(--primary)]">
-              Lista de Pacientes
-            </h2>
-            <p className="text-sm text-[var(--muted-foreground)]">
-              Visualize e gerencie os cadastros das pacientes
-            </p>
-          </div>
-
-          {/* Search + filter */}
-          <div className="flex flex-col sm:flex-row gap-3 mb-5">
-            <div className="relative flex-1">
-              <Search
-                size={15}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--primary)] pointer-events-none"
-              />
-              <Input
-                placeholder="Buscar paciente..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 rounded-full border-pink-200 focus-visible:border-[var(--primary)] bg-[var(--input-background)] text-sm"
-              />
-            </div>
-            <div className="flex gap-2">
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-44 rounded-full border-pink-200 bg-[var(--input-background)] text-sm">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="pendente">Pendente</SelectItem>
-                  <SelectItem value="encaminhado">Encaminhado</SelectItem>
-                  <SelectItem value="concluído">Concluído</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button
-                variant="outline"
-                size="icon"
-                className="rounded-full border-pink-200 hover:bg-[var(--secondary)] shrink-0"
-              >
-                <Filter size={15} className="text-[var(--primary)]" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Patient rows */}
-          <div className="flex flex-col gap-3">
-            {filtered.length === 0 && (
-              <p className="text-center text-sm text-[var(--muted-foreground)] py-6">
-                Nenhuma paciente encontrada.
-              </p>
-            )}
-            {filtered.map((patient) => (
-              <div
-                key={patient.id}
-                className="p-5 rounded-xl border border-pink-100 bg-[var(--secondary)] hover:bg-pink-100/60 transition-colors"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center flex-wrap gap-2 mb-1.5">
-                      <span className="font-medium text-sm">{patient.name}</span>
-                      <StatusBadge status={patient.status} />
-                      <PriorityBadge priority={patient.priority} />
-                    </div>
-                    <p className="text-sm text-[var(--muted-foreground)] mb-1">
-                      {patient.symptoms}
-                    </p>
-                    <p className="text-xs text-[var(--muted-foreground)]">
-                      Data de cadastro: {patient.date}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="rounded-full border-pink-300 hover:bg-white text-xs"
-                    >
-                      <Eye size={13} />
-                      Visualizar
-                    </Button>
-
-                    {patient.status === "pendente" && (
-                      <Button
-                        size="sm"
-                        onClick={() => handleForward(patient.id)}
-                        className="rounded-full bg-[var(--primary)] hover:bg-[var(--primary)]/90 text-white shadow-sm shadow-pink-200 text-xs"
-                      >
-                        <Send size={13} />
-                        Encaminhar
-                      </Button>
-                    )}
-
-                    {patient.status === "encaminhado" && (
-                      <Button
-                        size="sm"
-                        onClick={() => handleComplete(patient.id)}
-                        className="rounded-full bg-green-600 hover:bg-green-700 text-white shadow-sm shadow-green-200 text-xs"
-                      >
-                        <CheckCircle size={13} />
-                        Concluir
-                      </Button>
-                    )}
-                  </div>
+              <div className="flex items-center gap-3 rounded-2xl bg-pink-50 px-4 py-3 text-sm">
+                <div>
+                  <p className="text-[var(--muted-foreground)]">Horas acumuladas</p>
+                  <p className="text-lg font-semibold text-[var(--primary)]">
+                    {totalHours.toFixed(1)}h
+                  </p>
                 </div>
               </div>
-            ))}
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+              <VolunteerAgenda items={volunteerAgenda} />
+              <VolunteerHoursList entries={volunteerHours} />
+            </div>
           </div>
-        </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+              <div className="bg-white rounded-xl border border-[var(--border)] p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="font-medium text-sm">Pendentes</span>
+                  <div className="w-10 h-10 rounded-lg bg-yellow-100 flex items-center justify-center">
+                    <Clock size={18} className="text-yellow-600" />
+                  </div>
+                </div>
+                <p className="text-2xl font-semibold text-yellow-600">{pendingCount}</p>
+                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">Aguardando análise</p>
+              </div>
+
+              <div className="bg-white rounded-xl border border-[var(--border)] p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="font-medium text-sm">Encaminhados</span>
+                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                    <Send size={18} className="text-blue-600" />
+                  </div>
+                </div>
+                <p className="text-2xl font-semibold text-blue-600">{forwardedCount}</p>
+                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">Em atendimento</p>
+              </div>
+
+              <div className="bg-white rounded-xl border border-[var(--border)] p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="font-medium text-sm">Concluídos</span>
+                  <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+                    <CheckCircle size={18} className="text-green-600" />
+                  </div>
+                </div>
+                <p className="text-2xl font-semibold text-green-600">{completedCount}</p>
+                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">Finalizados</p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-[var(--border)] p-6">
+              <div className="mb-4">
+                <h2 className="text-base font-semibold text-[var(--primary)]">
+                  Lista de Pacientes
+                </h2>
+                <p className="text-sm text-[var(--muted-foreground)]">
+                  Visualize e gerencie os cadastros das pacientes
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 mb-5">
+                <div className="relative flex-1">
+                  <Search
+                    size={15}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--primary)] pointer-events-none"
+                  />
+                  <Input
+                    placeholder="Buscar paciente..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-9 rounded-full border-pink-200 focus-visible:border-[var(--primary)] bg-[var(--input-background)] text-sm"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-44 rounded-full border-pink-200 bg-[var(--input-background)] text-sm">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="pendente">Pendente</SelectItem>
+                      <SelectItem value="encaminhado">Encaminhado</SelectItem>
+                      <SelectItem value="concluído">Concluído</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="rounded-full border-pink-200 hover:bg-[var(--secondary)] shrink-0"
+                  >
+                    <Filter size={15} className="text-[var(--primary)]" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                {filtered.length === 0 && (
+                  <p className="text-center text-sm text-[var(--muted-foreground)] py-6">
+                    Nenhuma paciente encontrada.
+                  </p>
+                )}
+                {filtered.map((patient) => (
+                  <div
+                    key={patient.id}
+                    className="p-5 rounded-xl border border-pink-100 bg-[var(--secondary)] hover:bg-pink-100/60 transition-colors"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center flex-wrap gap-2 mb-1.5">
+                          <span className="font-medium text-sm">{patient.name}</span>
+                          <StatusBadge status={patient.status} />
+                          <PriorityBadge priority={patient.priority} />
+                        </div>
+                        <p className="text-sm text-[var(--muted-foreground)] mb-1">
+                          {patient.symptoms}
+                        </p>
+                        <p className="text-xs text-[var(--muted-foreground)]">
+                          Data de cadastro: {patient.date}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full border-pink-300 hover:bg-white text-xs"
+                        >
+                          <Eye size={13} />
+                          Visualizar
+                        </Button>
+
+                        {patient.status === "pendente" && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleForward(patient.id)}
+                            className="rounded-full bg-[var(--primary)] hover:bg-[var(--primary)]/90 text-white shadow-sm shadow-pink-200 text-xs"
+                          >
+                            <Send size={13} />
+                            Encaminhar
+                          </Button>
+                        )}
+
+                        {patient.status === "encaminhado" && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleComplete(patient.id)}
+                            className="rounded-full bg-green-600 hover:bg-green-700 text-white shadow-sm shadow-green-200 text-xs"
+                          >
+                            <CheckCircle size={13} />
+                            Concluir
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
       </main>
 
       {/* ── Footer ── */}
@@ -413,6 +479,12 @@ export function VolunteerArea() {
           </div>
         </div>
       </footer>
+
+      <VolunteerHoursModal
+        open={isHoursModalOpen}
+        onClose={() => setIsHoursModalOpen(false)}
+        onSubmit={handleRegisterHours}
+      />
     </div>
   );
 }
