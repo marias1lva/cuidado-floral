@@ -12,20 +12,17 @@ export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
   const [email, setEmail] = useState(""); 
   const [password, setPassword] = useState("");
   
-  // Estado para gerenciar mensagens de erro (Fluxos de Exceção)
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null); // Limpa erros anteriores ao tentar logar
+    setError(null); 
     
     if (activeTab === "login") {
-      // Simulação da validação do sistema
+      // Simulação de login para apresentação 
       if (email === "voluntario@exemplo.com" && password === "123") {
         onLoginSuccess();
       } else {
-        // Implementação das Exceções do Caso de Uso:
-        // 1. Usuário inexistente ou 2. Senha incorreta
         setError("E-mail ou senha incorretos. Por favor, tente novamente.");
       }
     } else {
@@ -79,7 +76,7 @@ export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
           </button>
         </div>
 
-        {/* Exibição visual do erro (Fluxo de Exceção) */}
+        {}
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 text-red-600 text-sm animate-in fade-in zoom-in duration-300">
             <AlertCircle size={18} className="shrink-0" />
