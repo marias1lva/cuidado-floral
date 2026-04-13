@@ -120,7 +120,11 @@ function PriorityBadge({ priority }: { priority: Priority }) {
   );
 }
 
-export function VolunteerArea() {
+interface VolunteerAreaProps {
+  onLogout: () => void;
+}
+
+export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [patientList, setPatientList] = useState<Patient[]>(initialPatients);
@@ -207,7 +211,10 @@ export function VolunteerArea() {
             <User size={17} />
             <span>Voluntária Maria</span>
           </div>
-          <button className="flex items-center gap-1 text-sm text-[var(--primary)] bg-transparent border-0 cursor-pointer hover:opacity-75 transition-opacity">
+          <button
+            onClick={onLogout}
+            className="flex items-center gap-1 text-sm text-[var(--primary)] bg-transparent border-0 cursor-pointer hover:opacity-75 transition-opacity"
+          >
             <LogOut size={15} />
             Sair
           </button>
