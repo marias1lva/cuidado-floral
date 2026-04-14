@@ -72,9 +72,9 @@ export function AdminUserModal({
   editingUser,
 }: AdminUserModalProps) {
   const [form, setForm] = useState<UserFormState>(initialFormState);
-  const [errors, setErrors] = useState<Partial<Record<keyof UserFormState, string>>>(
-    {},
-  );
+  const [errors, setErrors] = useState<
+    Partial<Record<keyof UserFormState, string>>
+  >({});
 
   useEffect(() => {
     if (!open) {
@@ -102,7 +102,10 @@ export function AdminUserModal({
     onClose();
   }
 
-  function setField<K extends keyof UserFormState>(field: K, value: UserFormState[K]) {
+  function setField<K extends keyof UserFormState>(
+    field: K,
+    value: UserFormState[K],
+  ) {
     setForm((current) => ({ ...current, [field]: value }));
     setErrors((current) => ({ ...current, [field]: undefined }));
   }
@@ -138,7 +141,8 @@ export function AdminUserModal({
     }
 
     const duplicatedByCpf = existingUsers.find(
-      (user) => normalizeCpf(user.cpf) === normalizedCpf && user.id !== editingUser?.id,
+      (user) =>
+        normalizeCpf(user.cpf) === normalizedCpf && user.id !== editingUser?.id,
     );
     if (duplicatedByCpf) {
       nextErrors.cpf = "Já existe um usuário com este CPF.";
@@ -197,7 +201,9 @@ export function AdminUserModal({
           <FormField label="CPF" error={errors.cpf}>
             <Input
               value={form.cpf}
-              onChange={(event) => setField("cpf", formatCpf(event.target.value))}
+              onChange={(event) =>
+                setField("cpf", formatCpf(event.target.value))
+              }
               placeholder="000.000.000-00"
               aria-invalid={Boolean(errors.cpf)}
               className="rounded-2xl border-pink-200 bg-[var(--input-background)]"
@@ -207,19 +213,31 @@ export function AdminUserModal({
           <FormField label="Tipo de acesso">
             <Select
               value={form.type}
-              onValueChange={(value) => setField("type", value as ManagedUserRole)}
+              onValueChange={(value) =>
+                setField("type", value as ManagedUserRole)
+              }
             >
               <SelectTrigger className="w-full rounded-2xl border-pink-200 bg-[var(--input-background)]">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
-                {(["admin", "voluntaria", "paciente", "doador"] as ManagedUserRole[]).map(
-                  (role) => (
-                    <SelectItem key={role} value={role}>
-                      {formatRoleLabel(role)}
-                    </SelectItem>
-                  ),
-                )}
+              <SelectContent
+                side="bottom"
+                align="start"
+                sideOffset={6}
+                className="z-[1000] rounded-2xl border-pink-200 bg-white shadow-lg"
+              >
+                {(
+                  [
+                    "admin",
+                    "voluntaria",
+                    "paciente",
+                    "doador",
+                  ] as ManagedUserRole[]
+                ).map((role) => (
+                  <SelectItem key={role} value={role}>
+                    {formatRoleLabel(role)}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </FormField>
@@ -255,9 +273,13 @@ interface FormFieldProps {
 function FormField({ label, children, error }: FormFieldProps) {
   return (
     <label>
-      <span className="mb-2 block text-sm font-medium text-[var(--foreground)]">{label}</span>
+      <span className="mb-2 block text-sm font-medium text-[var(--foreground)]">
+        {label}
+      </span>
       {children}
-      {error && <span className="mt-1 block text-xs text-red-600">{error}</span>}
+      {error && (
+        <span className="mt-1 block text-xs text-red-600">{error}</span>
+      )}
     </label>
   );
 }
