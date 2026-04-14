@@ -21,7 +21,13 @@ import { AdminUserModal } from "./admin/admin-user-modal";
 import type { ManagedUser, ManagedUserRole } from "./admin/types";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "./ui/card";
 
 type AdminTab = "users" | "campaigns" | "reports";
 
@@ -58,9 +64,27 @@ const initialUsers: ManagedUser[] = [
 ];
 
 const campaigns = [
-  { id: 1, name: "Outubro Rosa 2025", period: "01/10 - 31/10/2025", donations: 45, status: "Ativa" },
-  { id: 2, name: "Campanha de Cabelos", period: "01/09 - 30/11/2025", donations: 23, status: "Ativa" },
-  { id: 3, name: "Natal Solidário 2024", period: "01/12 - 24/12/2024", donations: 67, status: "Encerrada" },
+  {
+    id: 1,
+    name: "Outubro Rosa 2025",
+    period: "01/10 - 31/10/2025",
+    donations: 45,
+    status: "Ativa",
+  },
+  {
+    id: 2,
+    name: "Campanha de Cabelos",
+    period: "01/09 - 30/11/2025",
+    donations: 23,
+    status: "Ativa",
+  },
+  {
+    id: 3,
+    name: "Natal Solidário 2024",
+    period: "01/12 - 24/12/2024",
+    donations: 67,
+    status: "Encerrada",
+  },
 ];
 
 function getTodayDateLabel() {
@@ -110,10 +134,18 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
   }, [users]);
 
   const activeUsers = users.filter((user) => user.status === "Ativo");
-  const patientsCount = activeUsers.filter((user) => user.type === "paciente").length;
-  const volunteersCount = activeUsers.filter((user) => user.type === "voluntaria").length;
-  const donorsCount = activeUsers.filter((user) => user.type === "doador").length;
-  const activeCampaigns = campaigns.filter((campaign) => campaign.status === "Ativa").length;
+  const patientsCount = activeUsers.filter(
+    (user) => user.type === "paciente",
+  ).length;
+  const volunteersCount = activeUsers.filter(
+    (user) => user.type === "voluntaria",
+  ).length;
+  const donorsCount = activeUsers.filter(
+    (user) => user.type === "doador",
+  ).length;
+  const activeCampaigns = campaigns.filter(
+    (campaign) => campaign.status === "Ativa",
+  ).length;
 
   const totalDonations = useMemo(
     () => campaigns.reduce((sum, campaign) => sum + campaign.donations, 0),
@@ -203,75 +235,95 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
 
       <main className="flex-1 w-full max-w-[1200px] mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="mb-2 text-3xl font-semibold text-pink-600">Painel Administrativo</h1>
+          <h1 className="mb-2 text-3xl font-semibold text-pink-600">
+            Painel Administrativo
+          </h1>
           <p className="text-muted-foreground">
             Gerencie usuários, campanhas e visualize relatórios do sistema
           </p>
         </div>
 
         <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-4">
-          <Card className="border-pink-100">
+          <Card className="bg-pink-50 border-pink-200 shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Pacientes</CardTitle>
-                <div className="rounded-lg bg-pink-100 p-2">
+                <CardTitle className="text-lg font-medium text-foreground">
+                  Pacientes
+                </CardTitle>
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-pink-100">
                   <Users className="h-5 w-5 text-pink-600" />
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl text-pink-600">{patientsCount}</p>
+              <p className="text-2xl font-semibold text-pink-600">
+                {patientsCount}
+              </p>
               <p className="mt-1 text-xs text-muted-foreground">Ativos</p>
             </CardContent>
           </Card>
 
-          <Card className="border-pink-100">
+          <Card className="bg-purple-50 border-purple-200 shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Voluntárias</CardTitle>
-                <div className="rounded-lg bg-purple-100 p-2">
+                <CardTitle className="text-lg font-medium text-foreground">
+                  Voluntárias
+                </CardTitle>
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-100">
                   <UserCheck className="h-5 w-5 text-purple-600" />
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl text-purple-600">{volunteersCount}</p>
+              <p className="text-2xl font-semibold text-purple-600">
+                {volunteersCount}
+              </p>
               <p className="mt-1 text-xs text-muted-foreground">Ativas</p>
             </CardContent>
           </Card>
 
-          <Card className="border-pink-100">
+          <Card className="bg-blue-50 border-blue-200 shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Doadores</CardTitle>
-                <div className="rounded-lg bg-blue-100 p-2">
+                <CardTitle className="text-lg font-medium text-foreground">
+                  Doadores
+                </CardTitle>
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100">
                   <TrendingUp className="h-5 w-5 text-blue-600" />
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl text-blue-600">{donorsCount}</p>
+              <p className="text-2xl font-semibold text-blue-600">
+                {donorsCount}
+              </p>
               <p className="mt-1 text-xs text-muted-foreground">Ativos</p>
             </CardContent>
           </Card>
 
-          <Card className="border-pink-100">
+          <Card className="bg-green-50 border-green-200 shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Campanhas</CardTitle>
-                <div className="rounded-lg bg-green-100 p-2">
+                <CardTitle className="text-lg font-medium text-foreground">
+                  Campanhas
+                </CardTitle>
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100">
                   <FileText className="h-5 w-5 text-green-600" />
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl text-green-600">{campaigns.length}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{activeCampaigns} ativas</p>
+              <p className="text-2xl font-semibold text-green-600">
+                {campaigns.length}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {activeCampaigns} ativas
+              </p>
             </CardContent>
           </Card>
         </div>
 
-        <div className="mb-6 grid w-full grid-cols-3 rounded-full bg-pink-50 p-1">
+        <div className="mb-6 grid w-full grid-cols-3 rounded-full bg-pink-100 p-1 shadow-sm">
           <TabButton
             isActive={activeTab === "users"}
             label="Usuários"
@@ -290,11 +342,13 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
         </div>
 
         {activeTab === "users" && (
-          <Card className="border-pink-100">
+          <Card className="border-pink-100 bg-white">
             <CardHeader>
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                  <CardTitle className="text-pink-600">Gerenciamento de Usuários</CardTitle>
+                  <CardTitle className="text-pink-600">
+                    Gerenciamento de Usuários
+                  </CardTitle>
                   <CardDescription>
                     Visualize e gerencie todos os usuários do sistema
                   </CardDescription>
@@ -322,22 +376,33 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm">
                     <thead>
-                      <tr className="bg-pink-50 text-[var(--foreground)]">
+                      <tr className="bg-pink-200 text-slate-800">
                         <th className="px-4 py-3 font-semibold">Nome</th>
                         <th className="px-4 py-3 font-semibold">E-mail</th>
                         <th className="px-4 py-3 font-semibold">CPF</th>
                         <th className="px-4 py-3 font-semibold">Tipo</th>
                         <th className="px-4 py-3 font-semibold">Status</th>
-                        <th className="px-4 py-3 font-semibold">Data Cadastro</th>
-                        <th className="px-4 py-3 text-right font-semibold">Ações</th>
+                        <th className="px-4 py-3 font-semibold">
+                          Data Cadastro
+                        </th>
+                        <th className="px-4 py-3 text-right font-semibold">
+                          Ações
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
                       {users.map((user) => (
-                        <tr key={user.id} className="border-t border-pink-50 hover:bg-pink-50">
+                        <tr
+                          key={user.id}
+                          className="border-t border-pink-100 hover:bg-pink-50"
+                        >
                           <td className="px-4 py-3">{user.name}</td>
-                          <td className="px-4 py-3 text-muted-foreground">{user.email}</td>
-                          <td className="px-4 py-3 text-muted-foreground">{user.cpf}</td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {user.email}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {user.cpf}
+                          </td>
                           <td className="px-4 py-3">
                             <Badge
                               variant="outline"
@@ -358,13 +423,15 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
                               {user.status}
                             </Badge>
                           </td>
-                          <td className="px-4 py-3 text-muted-foreground">{user.date}</td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {user.date}
+                          </td>
                           <td className="px-4 py-3">
-                            <div className="flex justify-end gap-1">
+                            <div className="flex justify-end gap-2">
                               <Button
                                 variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 rounded-full"
+                                size="sm"
+                                className="h-8 w-8 p-0"
                                 onClick={() => openEditUserModal(user)}
                                 aria-label={`Editar ${user.name}`}
                               >
@@ -372,8 +439,8 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
                               </Button>
                               <Button
                                 variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 rounded-full"
+                                size="sm"
+                                className="h-8 w-8 p-0"
                                 onClick={() => handleInactivateUser(user.id)}
                                 disabled={user.status === "Inativo"}
                                 aria-label={`Inativar ${user.name}`}
@@ -397,7 +464,8 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
             <CardHeader>
               <CardTitle className="text-pink-600">Campanhas</CardTitle>
               <CardDescription>
-                {campaigns.length} campanhas cadastradas e {totalDonations} doações registradas.
+                {campaigns.length} campanhas cadastradas e {totalDonations}{" "}
+                doações registradas.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -407,7 +475,9 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
           <Card className="border-pink-100">
             <CardHeader>
               <CardTitle className="text-pink-600">Relatórios</CardTitle>
-              <CardDescription>Acesse indicadores administrativos detalhados.</CardDescription>
+              <CardDescription>
+                Acesse indicadores administrativos detalhados.
+              </CardDescription>
             </CardHeader>
           </Card>
         )}
@@ -419,11 +489,14 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
             <div>
               <div className="mb-3 flex items-center gap-2">
                 <Heart size={16} className="text-[var(--primary)]" />
-                <span className="text-sm font-semibold text-[var(--primary)]">Sobre Nós</span>
+                <span className="text-sm font-semibold text-[var(--primary)]">
+                  Sobre Nós
+                </span>
               </div>
               <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
-                A Rede Feminina de Combate ao Câncer de Mama de Itapema trabalha para apoiar
-                pacientes e promover a conscientização sobre o câncer de mama.
+                A Rede Feminina de Combate ao Câncer de Mama de Itapema trabalha
+                para apoiar pacientes e promover a conscientização sobre o
+                câncer de mama.
               </p>
             </div>
 
@@ -458,7 +531,9 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
                     key={label}
                     href="#"
                     className={`text-sm no-underline transition-colors hover:text-[var(--primary)] ${
-                      highlight ? "text-[var(--primary)]" : "text-[var(--muted-foreground)]"
+                      highlight
+                        ? "text-[var(--primary)]"
+                        : "text-[var(--muted-foreground)]"
                     }`}
                   >
                     {label}
@@ -469,7 +544,8 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
           </div>
 
           <div className="border-t border-[var(--border)] pt-4 text-center text-xs text-[var(--muted-foreground)]">
-            © 2025 Cuidado Floral - Rede Feminina de Combate ao Câncer de Mama. Todos os direitos reservados.
+            © 2025 Cuidado Floral - Rede Feminina de Combate ao Câncer de Mama.
+            Todos os direitos reservados.
           </div>
         </div>
       </footer>
@@ -499,10 +575,10 @@ function TabButton({ isActive, label, onClick }: TabButtonProps) {
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+      className={`rounded-full border px-4 py-2 text-sm font-semibold transition-all ${
         isActive
-          ? "bg-white text-[var(--foreground)] shadow-sm"
-          : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+          ? "border-pink-500 bg-white text-pink-700 shadow"
+          : "border-transparent text-slate-600 hover:border-pink-200 hover:bg-white/70 hover:text-slate-800"
       }`}
     >
       {label}
