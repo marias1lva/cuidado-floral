@@ -3,8 +3,10 @@ import { Mail, Lock, User, Heart, Flower2, AlertCircle } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 
+export type UserRole = "admin" | "voluntaria" | "paciente" | "doador";
+
 interface AuthScreenProps {
-  onLoginSuccess: () => void;
+  onLoginSuccess: (role: UserRole) => void;
 }
 
 export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
@@ -14,17 +16,27 @@ export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
   
   const [error, setError] = useState<string | null>(null);
 
+  const demoAccounts: Array<{ email: string; password: string; role: UserRole }> = [
+    { email: "admin@exemplo.com", password: "123", role: "admin" },
+    { email: "voluntario@exemplo.com", password: "123", role: "voluntaria" },
+    { email: "paciente@exemplo.com", password: "123", role: "paciente" },
+    { email: "doador@exemplo.com", password: "123", role: "doador" },
+  ];
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null); 
     
     if (activeTab === "login") {
-      // Simulação de login para apresentação 
-      if (email === "voluntario@exemplo.com" && password === "123") {
-        onLoginSuccess();
-      } else {
+      const matchedAccount = demoAccounts.find(
+        (account) => account.email === email.trim().toLowerCase() && account.password === password,
+      );
+      if (!matchedAccount) {
         setError("E-mail ou senha incorretos. Por favor, tente novamente.");
+        return;
       }
+
+      onLoginSuccess(matchedAccount.role);
     } else {
       alert("Funcionalidade de cadastro não implementada na demo.");
     }
@@ -47,6 +59,11 @@ export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
         <div className="text-center mb-8">
           <h2 className="text-[#E91E63] font-semibold text-lg mb-1">Bem-vinda ao Sistema</h2>
           <p className="text-sm text-[#8B7B7D]">Faça login ou cadastre-se para continuar</p>
+          {activeTab === "login" && (
+            <p className="mt-2 text-xs text-[#8B7B7D]">
+              Acessos demo: admin, voluntario, paciente ou doador com senha 123.
+            </p>
+          )}
         </div>
 
         <div className="flex bg-[#F5E6E8] p-1.5 rounded-full mb-8">
