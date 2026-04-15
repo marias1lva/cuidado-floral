@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { AuthScreen, type UserRole } from "./authScreen";
 import { AdminArea } from "./admin-area";
-import { UserArea } from "./user-area";
+import { UserArea } from "./user-area/user-area";
 import { VolunteerArea } from "./volunteerArea";
 
 export function App() {
