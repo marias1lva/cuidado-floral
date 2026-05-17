@@ -32,12 +32,11 @@ A Rede Feminina é uma ONG que apoia mulheres na prevenção, diagnóstico e tra
 - **shadcn/ui** (Radix UI)
 - **Lucide React**
 
-
 ## 👩‍💻 Equipe
 
 | Nome | E-mail |
 |------|--------|
-| Bruno de Almeida Aseff | bruno_aseff@edu.univali.br
+| Bruno de Almeida Aseff | bruno_aseff@edu.univali.br |
 | João Pedro Ferreira Dias | joao.8539057@edu.univali.br |
 | Maria Eduarda Lima da Silva | maria.limasilva@edu.univali.br |
 | Nicoly Maria Tejero Colutti | nicoly.colutti@edu.univali.br |

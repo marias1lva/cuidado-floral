@@ -2,20 +2,25 @@ import { useEffect, useMemo, useState } from "react";
 import { Bell, Calendar, FileText, Plus } from "lucide-react";
 
 import {
+  buildAppointmentId,
   loadAppointments,
   loadNotifications,
+  saveAppointments,
   saveNotifications,
 } from "../../domain/patient-data";
-import { DEMO_PATIENT_ID } from "../../domain/storage";
+import { DEMO_PATIENT_ID, DEMO_PATIENT_NAME } from "../../domain/storage";
 import type { Appointment, AppNotification } from "../../domain/types";
 import { PatientNotifications } from "./patient-notifications";
 import { PatientAppointmentsTimeline } from "./patient-appointments-timeline";
 import { formatDateBR } from "./patient-utils";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
+import { Dialog } from "../../ui/dialog";
+import { Input } from "../../ui/input";
+import { Textarea } from "../../ui/textarea";
 
 export function PatientDashboard() {
-  const [appointments] = useState<Appointment[]>(() =>
+  const [appointments, setAppointments] = useState<Appointment[]>(() =>
     loadAppointments().filter((apt) => apt.patientId === DEMO_PATIENT_ID),
   );
   const [notifications, setNotifications] = useState<AppNotification[]>(() =>
@@ -23,6 +28,7 @@ export function PatientDashboard() {
       (n) => n.recipientRole === "paciente" && (!n.recipientId || n.recipientId === DEMO_PATIENT_ID),
     ),
   );
+  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
 
   // Mantém o storage em sincronia. Como o array já contém só os items do paciente,
   // mesclamos com os de outros perfis no save (defensivo).
@@ -32,6 +38,15 @@ export function PatientDashboard() {
     );
     saveNotifications([...all, ...notifications]);
   }, [notifications]);
+
+  useEffect(() => {
+    const all = loadAppointments().filter((apt) => apt.patientId !== DEMO_PATIENT_ID);
+    saveAppointments([...all, ...appointments]);
+  }, [appointments]);
+
+  function handleSaveAppointment(appointment: Appointment) {
+    setAppointments((current) => [appointment, ...current]);
+  }
 
   const completedCount = useMemo(
     () => appointments.filter((a) => a.status === "concluido").length,
@@ -108,6 +123,13 @@ export function PatientDashboard() {
               <span>Concluídos:</span>
               <span>{completedCount}</span>
             </div>
+            <Button
+              className="mt-3 h-11 rounded-full bg-[var(--primary)] font-semibold text-white hover:bg-[var(--primary)]/90"
+              onClick={() => setIsRequestModalOpen(true)}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Solicitar Atendimento
+            </Button>
           </div>
         </DashboardCard>
 
@@ -143,7 +165,157 @@ export function PatientDashboard() {
           onMarkAllAsRead={handleMarkAllAsRead}
         />
       </div>
+      <PatientRequestAppointmentModal
+        open={isRequestModalOpen}
+        onClose={() => setIsRequestModalOpen(false)}
+        onSave={handleSaveAppointment}
+      />
     </div>
+  );
+}
+
+interface PatientRequestAppointmentModalProps {
+  open: boolean;
+  onClose: () => void;
+  onSave: (appointment: Appointment) => void;
+}
+
+function PatientRequestAppointmentModal({
+  open,
+  onClose,
+  onSave,
+}: PatientRequestAppointmentModalProps) {
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [consultationType, setConsultationType] = useState(
+    "Acolhimento inicial",
+  );
+  const [notes, setNotes] = useState("");
+
+  function handleClose() {
+    setDate("");
+    setTime("");
+    setConsultationType("Acolhimento inicial");
+    setNotes("");
+    onClose();
+  }
+
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!date || !time) {
+      return;
+    }
+
+    onSave({
+      id: buildAppointmentId(),
+      patientId: DEMO_PATIENT_ID,
+      patientName: DEMO_PATIENT_NAME,
+      date,
+      time,
+      volunteerName: "Atendimento Solicitado",
+      status: "agendado",
+      observacoes: `Solicitação de atendimento: ${consultationType}${
+        notes ? ` — ${notes}` : ""
+      }`,
+      encaminhamento: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    handleClose();
+  }
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      title="Solicitar atendimento"
+      description="Insira os dados para solicitar um novo atendimento."
+    >
+      <form className="space-y-5" onSubmit={handleSubmit}>
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
+            Nome do paciente
+          </label>
+          <Input
+            type="text"
+            value={DEMO_PATIENT_NAME}
+            disabled
+            className="bg-[#F8F1F5] text-sm"
+          />
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
+              Data
+            </label>
+            <Input
+              type="date"
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+              required
+              className="text-sm"
+            />
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
+              Horário
+            </label>
+            <Input
+              type="time"
+              value={time}
+              onChange={(event) => setTime(event.target.value)}
+              required
+              className="text-sm"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
+            Tipo de consulta
+          </label>
+          <select
+            value={consultationType}
+            onChange={(event) => setConsultationType(event.target.value)}
+            className="w-full rounded-2xl border border-input bg-input-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50"
+          >
+            <option>Acolhimento inicial</option>
+            <option>Consulta de acompanhamento</option>
+            <option>Sessão de fisioterapia</option>
+            <option>Sessão de psicologia</option>
+            <option>Consulta de retorno</option>
+            <option>Outra</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
+            Observações
+          </label>
+          <Textarea
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            placeholder="Descreva alguma informação adicional..."
+            className="text-sm"
+          />
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+          <Button type="button" variant="secondary" onClick={handleClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" className="h-11 rounded-full bg-[var(--primary)] text-white hover:bg-[var(--primary)]/90">
+            Solicitar atendimento
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 
