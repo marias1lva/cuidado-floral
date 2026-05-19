@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Mail, Lock, User, Heart, Flower2, AlertCircle } from "lucide-react";
+import { loginWithDemoAccount } from "./domain/auth";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 
@@ -13,30 +14,30 @@ export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
   const [activeTab, setActiveTab] = useState<"login" | "register">("login");
   const [email, setEmail] = useState(""); 
   const [password, setPassword] = useState("");
-  
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const demoAccounts: Array<{ email: string; password: string; role: UserRole }> = [
-    { email: "admin@exemplo.com", password: "123", role: "admin" },
-    { email: "voluntario@exemplo.com", password: "123", role: "voluntaria" },
-    { email: "paciente@exemplo.com", password: "123", role: "paciente" },
-    { email: "doador@exemplo.com", password: "123", role: "doador" },
-  ];
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null); 
     
     if (activeTab === "login") {
-      const matchedAccount = demoAccounts.find(
-        (account) => account.email === email.trim().toLowerCase() && account.password === password,
-      );
-      if (!matchedAccount) {
-        setError("E-mail ou senha incorretos. Por favor, tente novamente.");
-        return;
+      setIsSubmitting(true);
+      try {
+        const response = await loginWithDemoAccount(
+          email.trim().toLowerCase(),
+          password,
+        );
+        onLoginSuccess(response.role);
+      } catch (loginError) {
+        setError(
+          loginError instanceof Error
+            ? loginError.message
+            : "E-mail ou senha incorretos. Por favor, tente novamente.",
+        );
+      } finally {
+        setIsSubmitting(false);
       }
-
-      onLoginSuccess(matchedAccount.role);
     } else {
       alert("Funcionalidade de cadastro não implementada na demo.");
     }
@@ -176,9 +177,14 @@ export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
 
           <Button 
             type="submit"
+            disabled={isSubmitting}
             className="w-full h-14 rounded-full bg-[#E91E63] hover:bg-[#C2185B] text-white font-bold text-lg shadow-md shadow-pink-100 transition-transform active:scale-[0.98]"
           >
-            {activeTab === "login" ? "Entrar" : "Criar Conta"}
+            {activeTab === "login"
+              ? isSubmitting
+                ? "Entrando..."
+                : "Entrar"
+              : "Criar Conta"}
           </Button>
         </form>
       </div>
