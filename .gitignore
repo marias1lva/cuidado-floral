@@ -40,3 +40,6 @@ Thumbs.db
 
 # Testing / coverage
 coverage/
+
+# Backend local data
+server/data/
