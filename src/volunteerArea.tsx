@@ -15,23 +15,23 @@ import {
   SelectValue,
 } from "./ui/select";
 import {
-  initialVolunteerHours,
-  volunteerAgenda,
-} from "./volunteer-hours/constants";
-import {
   VolunteerAreaTabs,
   type VolunteerAreaTab,
 } from "./volunteer-area-tabs";
 import { VolunteerAgenda } from "./volunteer-hours/volunteer-agenda";
 import { VolunteerHoursList } from "./volunteer-hours/volunteer-hours-list";
 import { VolunteerHoursModal } from "./volunteer-hours/volunteer-hours-modal";
-import type { VolunteerHourEntry } from "./volunteer-hours/types";
 import {
   loadAppointments,
   saveAppointments,
 } from "./domain/patient-data";
 import { loadPatients, savePatients } from "./domain/patients-data";
 import { DEMO_VOLUNTEER_NAME } from "./domain/storage";
+import {
+  loadVolunteerAgenda,
+  loadVolunteerHours,
+  saveVolunteerHours,
+} from "./domain/volunteer-data";
 import type {
   Appointment,
   Patient,
@@ -40,6 +40,10 @@ import type {
 } from "./domain/types";
 import { PatientHistoryModal } from "./user-area/patient/patient-history-modal";
 import { formatDateBR } from "./user-area/patient/patient-utils";
+import type {
+  VolunteerAgendaItem,
+  VolunteerHourEntry,
+} from "./volunteer-hours/types";
 
 const statusConfig: Record<
   PatientWorkflowStatus,
@@ -98,41 +102,65 @@ interface VolunteerAreaProps {
 export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [patientList, setPatientList] = useState<Patient[]>(() => loadPatients());
-  const [appointments, setAppointments] = useState<Appointment[]>(() =>
-    loadAppointments(),
-  );
+  const [patientList, setPatientList] = useState<Patient[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [activeTab, setActiveTab] = useState<VolunteerAreaTab>("patients");
   const [isHoursModalOpen, setIsHoursModalOpen] = useState(false);
   const [historyPatientId, setHistoryPatientId] = useState<string | null>(null);
-  const [volunteerHours, setVolunteerHours] = useState<VolunteerHourEntry[]>(() => {
-    if (typeof window === "undefined") {
-      return initialVolunteerHours;
-    }
-
-    const savedEntries = window.localStorage.getItem("volunteer-hours");
-    if (!savedEntries) {
-      return initialVolunteerHours;
-    }
-
-    try {
-      return JSON.parse(savedEntries) as VolunteerHourEntry[];
-    } catch {
-      return initialVolunteerHours;
-    }
-  });
+  const [volunteerHours, setVolunteerHours] = useState<VolunteerHourEntry[]>([]);
+  const [volunteerAgenda, setVolunteerAgenda] = useState<VolunteerAgendaItem[]>([]);
+  const [hasLoadedPatients, setHasLoadedPatients] = useState(false);
+  const [hasLoadedAppointments, setHasLoadedAppointments] = useState(false);
+  const [hasLoadedVolunteerHours, setHasLoadedVolunteerHours] = useState(false);
 
   useEffect(() => {
-    savePatients(patientList);
-  }, [patientList]);
+    let isMounted = true;
+
+    void Promise.all([
+      loadPatients(),
+      loadAppointments(),
+      loadVolunteerHours(),
+      loadVolunteerAgenda(),
+    ])
+      .then(([patients, loadedAppointments, hours, agenda]) => {
+        if (!isMounted) return;
+        setPatientList(patients);
+        setAppointments(loadedAppointments);
+        setVolunteerHours(hours);
+        setVolunteerAgenda(agenda);
+        setHasLoadedPatients(true);
+        setHasLoadedAppointments(true);
+        setHasLoadedVolunteerHours(true);
+      })
+      .catch((error) => {
+        console.error("Falha ao carregar área da voluntária", error);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
-    saveAppointments(appointments);
-  }, [appointments]);
+    if (!hasLoadedPatients) return;
+    void savePatients(patientList).catch((error) => {
+      console.error("Falha ao salvar pacientes", error);
+    });
+  }, [patientList, hasLoadedPatients]);
 
   useEffect(() => {
-    window.localStorage.setItem("volunteer-hours", JSON.stringify(volunteerHours));
-  }, [volunteerHours]);
+    if (!hasLoadedAppointments) return;
+    void saveAppointments(appointments).catch((error) => {
+      console.error("Falha ao salvar atendimentos", error);
+    });
+  }, [appointments, hasLoadedAppointments]);
+
+  useEffect(() => {
+    if (!hasLoadedVolunteerHours) return;
+    void saveVolunteerHours(volunteerHours).catch((error) => {
+      console.error("Falha ao salvar horas voluntárias", error);
+    });
+  }, [volunteerHours, hasLoadedVolunteerHours]);
 
   const pendingCount = patientList.filter((p) => p.status === "pendente").length;
   const forwardedCount = patientList.filter((p) => p.status === "encaminhado").length;

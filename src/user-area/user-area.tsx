@@ -34,11 +34,33 @@ const roleContent: Record<
 export function UserArea({ role, onLogout }: UserAreaProps) {
   const content = roleContent[role];
   const [isDonationModalOpen, setIsDonationModalOpen] = useState(false);
-  const [donations, setDonations] = useState<Donation[]>(() => loadDonations());
+  const [donations, setDonations] = useState<Donation[]>([]);
+  const [hasLoadedDonations, setHasLoadedDonations] = useState(false);
 
   useEffect(() => {
-    saveDonations(donations);
-  }, [donations]);
+    let isMounted = true;
+
+    void loadDonations()
+      .then((items) => {
+        if (!isMounted) return;
+        setDonations(items);
+        setHasLoadedDonations(true);
+      })
+      .catch((error) => {
+        console.error("Falha ao carregar doações", error);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedDonations) return;
+    void saveDonations(donations).catch((error) => {
+      console.error("Falha ao salvar doações", error);
+    });
+  }, [donations, hasLoadedDonations]);
 
   const donorDonations = useMemo(
     () => donations.filter((d) => d.donorId === DEMO_DONOR_ID),

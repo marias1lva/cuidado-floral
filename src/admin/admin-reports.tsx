@@ -79,8 +79,21 @@ export function AdminReports() {
 
   // Carrega dos repositórios. Re-carrega ao trocar a aba via key na admin-area.
   useEffect(() => {
-    setAllAppointments(loadAppointments());
-    setAllDonations(loadDonations());
+    let isMounted = true;
+
+    void Promise.all([loadAppointments(), loadDonations()])
+      .then(([appointments, donations]) => {
+        if (!isMounted) return;
+        setAllAppointments(appointments);
+        setAllDonations(donations);
+      })
+      .catch((error) => {
+        console.error("Falha ao carregar relatórios", error);
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const filteredAppointments = useMemo(

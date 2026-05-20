@@ -28,9 +28,26 @@ A Rede Feminina é uma ONG que apoia mulheres na prevenção, diagnóstico e tra
 
 - **React** + **TypeScript**
 - **Vite**
+- **Fastify**
 - **Tailwind CSS v4**
 - **shadcn/ui** (Radix UI)
 - **Lucide React**
+
+## Backend local
+
+O projeto agora possui um backend simples em `server/`, com persistência em arquivo JSON local.
+
+- `npm run dev` sobe frontend e backend juntos
+- `npm run seed` recria o arquivo `server/data/app-data.json` com os mocks originais
+- a API usa rotas REST em `/api/*`
+
+### Estrutura
+
+- `server/index.ts`: servidor Fastify
+- `server/store.ts`: leitura e escrita do JSON local
+- `server/mock-data.ts`: seed centralizado com os mocks do projeto
+
+Essa camada foi pensada para ser temporária: quando o MySQL estiver pronto, a troca principal fica concentrada no backend, sem precisar refazer os componentes do frontend.
 
 ## 👩‍💻 Equipe
 

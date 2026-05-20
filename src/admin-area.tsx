@@ -20,6 +20,12 @@ import {
 import { AdminUserModal } from "./admin/admin-user-modal";
 import { AdminReports } from "./admin/admin-reports";
 import type { ManagedUser, ManagedUserRole } from "./admin/types";
+import {
+  loadCampaigns,
+  loadManagedUsers,
+  saveManagedUsers,
+  type Campaign,
+} from "./domain/admin-data";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import {
@@ -31,62 +37,6 @@ import {
 } from "./ui/card";
 
 type AdminTab = "users" | "campaigns" | "reports";
-
-const USERS_STORAGE_KEY = "admin-managed-users";
-
-const initialUsers: ManagedUser[] = [
-  {
-    id: 1,
-    name: "Maria Silva",
-    email: "maria@email.com",
-    cpf: "123.456.789-09",
-    type: "paciente",
-    status: "Ativo",
-    date: "10/10/2025",
-  },
-  {
-    id: 2,
-    name: "Ana Voluntária",
-    email: "ana@email.com",
-    cpf: "987.654.321-00",
-    type: "voluntaria",
-    status: "Ativo",
-    date: "05/09/2025",
-  },
-  {
-    id: 3,
-    name: "João Doador",
-    email: "joao@email.com",
-    cpf: "456.789.123-10",
-    type: "doador",
-    status: "Ativo",
-    date: "15/08/2025",
-  },
-];
-
-const campaigns = [
-  {
-    id: 1,
-    name: "Outubro Rosa 2025",
-    period: "01/10 - 31/10/2025",
-    donations: 45,
-    status: "Ativa",
-  },
-  {
-    id: 2,
-    name: "Campanha de Cabelos",
-    period: "01/09 - 30/11/2025",
-    donations: 23,
-    status: "Ativa",
-  },
-  {
-    id: 3,
-    name: "Natal Solidário 2024",
-    period: "01/12 - 24/12/2024",
-    donations: 67,
-    status: "Encerrada",
-  },
-];
 
 function getTodayDateLabel() {
   return new Intl.DateTimeFormat("pt-BR").format(new Date());
@@ -111,28 +61,37 @@ interface AdminAreaProps {
 
 export function AdminArea({ onLogout }: AdminAreaProps) {
   const [activeTab, setActiveTab] = useState<AdminTab>("users");
-  const [users, setUsers] = useState<ManagedUser[]>(() => {
-    if (typeof window === "undefined") {
-      return initialUsers;
-    }
-
-    const savedUsers = window.localStorage.getItem(USERS_STORAGE_KEY);
-    if (!savedUsers) {
-      return initialUsers;
-    }
-
-    try {
-      return JSON.parse(savedUsers) as ManagedUser[];
-    } catch {
-      return initialUsers;
-    }
-  });
+  const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<ManagedUser | null>(null);
+  const [hasLoadedUsers, setHasLoadedUsers] = useState(false);
 
   useEffect(() => {
-    window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
-  }, [users]);
+    let isMounted = true;
+
+    void Promise.all([loadManagedUsers(), loadCampaigns()])
+      .then(([managedUsers, loadedCampaigns]) => {
+        if (!isMounted) return;
+        setUsers(managedUsers);
+        setCampaigns(loadedCampaigns);
+        setHasLoadedUsers(true);
+      })
+      .catch((error) => {
+        console.error("Falha ao carregar área administrativa", error);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedUsers) return;
+    void saveManagedUsers(users).catch((error) => {
+      console.error("Falha ao salvar usuários", error);
+    });
+  }, [users, hasLoadedUsers]);
 
   const activeUsers = users.filter((user) => user.status === "Ativo");
   const patientsCount = activeUsers.filter(
@@ -150,7 +109,7 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
 
   const totalDonations = useMemo(
     () => campaigns.reduce((sum, campaign) => sum + campaign.donations, 0),
-    [],
+    [campaigns],
   );
 
   function openCreateUserModal() {

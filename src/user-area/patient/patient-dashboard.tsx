@@ -20,53 +20,84 @@ import { Input } from "../../ui/input";
 import { Textarea } from "../../ui/textarea";
 
 export function PatientDashboard() {
-  const [appointments, setAppointments] = useState<Appointment[]>(() =>
-    loadAppointments().filter((apt) => apt.patientId === DEMO_PATIENT_ID),
-  );
-  const [notifications, setNotifications] = useState<AppNotification[]>(() =>
-    loadNotifications().filter(
-      (n) => n.recipientRole === "paciente" && (!n.recipientId || n.recipientId === DEMO_PATIENT_ID),
-    ),
-  );
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
-
-  // Mantém o storage em sincronia. Como o array já contém só os items do paciente,
-  // mesclamos com os de outros perfis no save (defensivo).
-  useEffect(() => {
-    const all = loadNotifications().filter(
-      (n) => !(n.recipientRole === "paciente" && (!n.recipientId || n.recipientId === DEMO_PATIENT_ID)),
-    );
-    saveNotifications([...all, ...notifications]);
-  }, [notifications]);
+  const [hasLoadedAppointments, setHasLoadedAppointments] = useState(false);
+  const [hasLoadedNotifications, setHasLoadedNotifications] = useState(false);
 
   useEffect(() => {
-    const all = loadAppointments().filter((apt) => apt.patientId !== DEMO_PATIENT_ID);
-    saveAppointments([...all, ...appointments]);
-  }, [appointments]);
+    let isMounted = true;
+
+    void Promise.all([loadAppointments(), loadNotifications()])
+      .then(([loadedAppointments, loadedNotifications]) => {
+        if (!isMounted) return;
+        setAppointments(loadedAppointments);
+        setNotifications(loadedNotifications);
+        setHasLoadedAppointments(true);
+        setHasLoadedNotifications(true);
+      })
+      .catch((error) => {
+        console.error("Falha ao carregar dados da paciente", error);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const patientAppointments = useMemo(
+    () => appointments.filter((apt) => apt.patientId === DEMO_PATIENT_ID),
+    [appointments],
+  );
+  const patientNotifications = useMemo(
+    () =>
+      notifications.filter(
+        (notification) =>
+          notification.recipientRole === "paciente" &&
+          (!notification.recipientId ||
+            notification.recipientId === DEMO_PATIENT_ID),
+      ),
+    [notifications],
+  );
+
+  useEffect(() => {
+    if (!hasLoadedNotifications) return;
+    void saveNotifications(notifications).catch((error) => {
+      console.error("Falha ao salvar notificações", error);
+    });
+  }, [notifications, hasLoadedNotifications]);
+
+  useEffect(() => {
+    if (!hasLoadedAppointments) return;
+    void saveAppointments(appointments).catch((error) => {
+      console.error("Falha ao salvar atendimentos", error);
+    });
+  }, [appointments, hasLoadedAppointments]);
 
   function handleSaveAppointment(appointment: Appointment) {
     setAppointments((current) => [appointment, ...current]);
   }
 
   const completedCount = useMemo(
-    () => appointments.filter((a) => a.status === "concluido").length,
-    [appointments],
+    () => patientAppointments.filter((a) => a.status === "concluido").length,
+    [patientAppointments],
   );
   const scheduledCount = useMemo(
     () =>
-      appointments.filter(
+      patientAppointments.filter(
         (a) => a.status === "agendado" || a.status === "em_andamento",
       ).length,
-    [appointments],
+    [patientAppointments],
   );
   const nextAppointment = useMemo(() => {
-    const upcoming = appointments
+    const upcoming = patientAppointments
       .filter((a) => a.status === "agendado" || a.status === "em_andamento")
       .sort((a, b) => a.date.localeCompare(b.date));
     return upcoming[0];
-  }, [appointments]);
+  }, [patientAppointments]);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = patientNotifications.filter((n) => !n.read).length;
 
   function handleMarkAsRead(id: string) {
     setNotifications((current) =>
@@ -158,9 +189,9 @@ export function PatientDashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-2">
-        <PatientAppointmentsTimeline appointments={appointments} />
+        <PatientAppointmentsTimeline appointments={patientAppointments} />
         <PatientNotifications
-          notifications={notifications}
+          notifications={patientNotifications}
           onMarkAsRead={handleMarkAsRead}
           onMarkAllAsRead={handleMarkAllAsRead}
         />
