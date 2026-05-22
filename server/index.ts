@@ -1,20 +1,51 @@
+import { mkdir, stat } from "node:fs/promises";
+import { resolve } from "node:path";
+import { pipeline } from "node:stream/promises";
+import { createWriteStream } from "node:fs";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
+import fastifyStatic from "@fastify/static";
 import type { ManagedUser } from "../src/admin/types";
 import type {
   AppNotification,
   Appointment,
+  AppointmentAttachment,
   Donation,
   Patient,
 } from "../src/domain/types";
 import type { VolunteerHourEntry } from "../src/volunteer-hours/types";
 import { readStore, toManagedUsers, writeStore } from "./store";
 
+const UPLOADS_DIR = resolve(process.cwd(), "server/data/uploads");
+await mkdir(UPLOADS_DIR, { recursive: true });
+
 const app = Fastify({ logger: false });
 
 await app.register(cors, {
   origin: true,
 });
+
+await app.register(multipart, {
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10 MB por arquivo
+    files: 10,
+  },
+});
+
+await app.register(fastifyStatic, {
+  root: UPLOADS_DIR,
+  prefix: "/uploads/",
+  decorateReply: false,
+});
+
+function safeFilename(name: string): string {
+  return name.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120) || "arquivo";
+}
+
+function makeUploadId(): string {
+  return `att-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
+}
 
 app.get("/api/health", async () => ({ status: "ok" }));
 
@@ -132,7 +163,44 @@ app.get("/api/volunteer-agenda", async () => {
   return store.volunteerAgenda;
 });
 
+app.post("/api/uploads", async (request, reply) => {
+  const parts = request.files();
+  const uploaded: AppointmentAttachment[] = [];
+
+  for await (const part of parts) {
+    const id = makeUploadId();
+    const folder = resolve(UPLOADS_DIR, id);
+    await mkdir(folder, { recursive: true });
+
+    const filename = safeFilename(part.filename);
+    const fullPath = resolve(folder, filename);
+
+    await pipeline(part.file, createWriteStream(fullPath));
+
+    if (part.file.truncated) {
+      return reply.status(413).send({
+        message: "Arquivo excede o limite de 10 MB.",
+      });
+    }
+
+    const { size } = await stat(fullPath);
+
+    uploaded.push({
+      id,
+      filename,
+      mimeType: part.mimetype,
+      size,
+      url: `/uploads/${id}/${filename}`,
+      uploadedAt: new Date().toISOString(),
+    });
+  }
+
+  return uploaded;
+});
+
 await app.listen({
   host: "0.0.0.0",
   port: 3001,
 });
+
+console.log("API rodando em http://localhost:3001");

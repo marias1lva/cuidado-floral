@@ -1,4 +1,4 @@
-import { CalendarDays, Clock, User2, ArrowRight } from "lucide-react";
+import { CalendarDays, Clock, User2, ArrowRight, Stethoscope } from "lucide-react";
 
 import { Badge } from "../../ui/badge";
 import type { Appointment } from "../../domain/types";
@@ -8,6 +8,7 @@ import {
   formatDateBR,
   referralLabel,
 } from "./patient-utils";
+import { AppointmentAttachments } from "./appointment-attachments";
 
 interface PatientAppointmentsTimelineProps {
   appointments: Appointment[];
@@ -70,10 +71,23 @@ export function PatientAppointmentsTimeline({
                   </span>
                 </div>
 
+                {appointment.professionalName && (
+                  <p className="mt-2 inline-flex items-center gap-1 text-xs text-[var(--muted-foreground)]">
+                    <Stethoscope size={12} />
+                    {appointment.professionalName}
+                  </p>
+                )}
+
                 {appointment.observacoes && (
                   <p className="mt-3 text-sm text-[var(--foreground)]">
                     {appointment.observacoes}
                   </p>
+                )}
+
+                {appointment.attachments && appointment.attachments.length > 0 && (
+                  <div className="mt-3">
+                    <AppointmentAttachments attachments={appointment.attachments} />
+                  </div>
                 )}
 
                 {appointment.encaminhamento && (

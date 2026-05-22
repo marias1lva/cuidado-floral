@@ -1,5 +1,11 @@
 import { apiRequest } from "./api";
-import type { Appointment, AppNotification } from "./types";
+import type {
+  Appointment,
+  AppNotification,
+  AppointmentAttachment,
+} from "./types";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
 export function buildAppointmentId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -29,4 +35,25 @@ export function saveNotifications(
     method: "PUT",
     body: JSON.stringify(items),
   });
+}
+
+export async function uploadAttachments(
+  files: File[],
+): Promise<AppointmentAttachment[]> {
+  if (files.length === 0) return [];
+  const formData = new FormData();
+  files.forEach((file, index) => {
+    formData.append(`file${index}`, file, file.name);
+  });
+  const response = await fetch(`${API_BASE_URL}/uploads`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as {
+      message?: string;
+    } | null;
+    throw new Error(payload?.message ?? "Falha ao enviar os arquivos.");
+  }
+  return (await response.json()) as AppointmentAttachment[];
 }

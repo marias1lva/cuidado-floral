@@ -1,12 +1,36 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { AuthScreen, type UserRole } from "./authScreen";
 import { AdminArea } from "./admin-area";
 import { UserArea } from "./user-area/user-area";
 import { VolunteerArea } from "./volunteerArea";
 
+const SESSION_STORAGE_KEY = "cf:session-role";
+const VALID_ROLES: UserRole[] = ["admin", "voluntaria", "paciente", "doador"];
+
+function loadSessionRole(): UserRole | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
+  if (raw && (VALID_ROLES as string[]).includes(raw)) {
+    return raw as UserRole;
+  }
+  return null;
+}
+
 export function App() {
-  const [loggedRole, setLoggedRole] = useState<UserRole | null>(null);
+  const [loggedRole, setLoggedRole] = useState<UserRole | null>(() =>
+    loadSessionRole(),
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (loggedRole) {
+      window.localStorage.setItem(SESSION_STORAGE_KEY, loggedRole);
+    } else {
+      window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    }
+  }, [loggedRole]);
+
   const handleLogout = () => setLoggedRole(null);
 
   if (loggedRole === "admin") {

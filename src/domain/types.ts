@@ -24,6 +24,17 @@ export type AppointmentStatus =
   | "encaminhado"
   | "cancelado";
 
+export type AppointmentAuthor = "paciente" | "voluntaria";
+
+export interface AppointmentAttachment {
+  id: string;
+  filename: string;
+  mimeType: string;
+  size: number; // bytes
+  url: string; // /uploads/<folder>/<file>
+  uploadedAt: string; // ISO datetime
+}
+
 export type AppointmentReferral =
   | "mastologista"
   | "psicologia"
@@ -40,10 +51,13 @@ export interface Appointment {
   date: string; // YYYY-MM-DD
   time?: string; // HH:mm
   volunteerName: string;
+  professionalName?: string; // médico ou clínica externa (atendimento registrado pela paciente)
   status: AppointmentStatus;
   observacoes: string;
   encaminhamento: AppointmentReferral;
   encaminhamentoDetalhe?: string;
+  attachments?: AppointmentAttachment[];
+  createdBy?: AppointmentAuthor;
   createdAt: string; // ISO datetime
   updatedAt: string; // ISO datetime
 }

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { X, Pencil, Trash2, Plus, ArrowRight, Clock, User2 } from "lucide-react";
+import { X, Pencil, Trash2, Plus, ArrowRight, Clock, User2, Stethoscope } from "lucide-react";
 
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
@@ -13,6 +13,7 @@ import {
   referralLabel,
 } from "./patient-utils";
 import { PatientHistoryForm } from "./patient-history-form";
+import { AppointmentAttachments } from "./appointment-attachments";
 
 interface PatientHistoryModalProps {
   patient: Patient;
@@ -188,10 +189,23 @@ export function PatientHistoryModal({
                       </div>
                     </div>
 
+                    {appointment.professionalName && (
+                      <p className="mt-2 inline-flex items-center gap-1 text-xs text-[var(--muted-foreground)]">
+                        <Stethoscope size={12} />
+                        {appointment.professionalName}
+                      </p>
+                    )}
+
                     {appointment.observacoes && (
                       <p className="mt-3 text-sm text-[var(--foreground)]">
                         {appointment.observacoes}
                       </p>
+                    )}
+
+                    {appointment.attachments && appointment.attachments.length > 0 && (
+                      <div className="mt-3">
+                        <AppointmentAttachments attachments={appointment.attachments} />
+                      </div>
                     )}
 
                     {appointment.encaminhamento && (
