@@ -1,3 +1,4 @@
+import bcrypt from "bcryptjs";
 import type { ManagedUser } from "../src/admin/types";
 import {
   DEMO_DONOR_ID,
@@ -11,6 +12,7 @@ import type {
   Appointment,
   Donation,
   Patient,
+  Sector,
 } from "../src/domain/types";
 import type {
   VolunteerAgendaItem,
@@ -18,7 +20,7 @@ import type {
 } from "../src/volunteer-hours/types";
 
 export interface StoredUser extends ManagedUser {
-  password: string;
+  passwordHash: string;
 }
 
 export interface Campaign {
@@ -36,11 +38,18 @@ export interface AppData {
   donations: Donation[];
   users: StoredUser[];
   campaigns: Campaign[];
+  sectors: Sector[];
   volunteerHours: VolunteerHourEntry[];
   volunteerAgenda: VolunteerAgendaItem[];
 }
 
+// Hash síncrono apenas no seed (rodado uma vez); custo aceitável.
+export function hashPasswordSync(password: string): string {
+  return bcrypt.hashSync(password, 10);
+}
+
 export function buildSeedData(): AppData {
+  const seedHash = hashPasswordSync("123");
   return {
     patients: [
       {
@@ -214,7 +223,7 @@ export function buildSeedData(): AppData {
         type: "admin",
         status: "Ativo",
         date: "01/08/2025",
-        password: "123",
+        passwordHash: seedHash,
       },
       {
         id: 2,
@@ -224,7 +233,7 @@ export function buildSeedData(): AppData {
         type: "voluntaria",
         status: "Ativo",
         date: "05/09/2025",
-        password: "123",
+        passwordHash: seedHash,
       },
       {
         id: 3,
@@ -234,7 +243,7 @@ export function buildSeedData(): AppData {
         type: "paciente",
         status: "Ativo",
         date: "10/10/2025",
-        password: "123",
+        passwordHash: seedHash,
       },
       {
         id: 4,
@@ -244,7 +253,7 @@ export function buildSeedData(): AppData {
         type: "doador",
         status: "Ativo",
         date: "15/08/2025",
-        password: "123",
+        passwordHash: seedHash,
       },
     ],
     campaigns: [
@@ -268,6 +277,38 @@ export function buildSeedData(): AppData {
         period: "01/12 - 24/12/2024",
         donations: 67,
         status: "Encerrada",
+      },
+    ],
+    sectors: [
+      {
+        id: "sec-mastologia",
+        name: "Mastologia",
+        slug: "mastologista",
+        description: "Encaminhamento médico para avaliação de mama.",
+      },
+      {
+        id: "sec-psicologia",
+        name: "Psicologia",
+        slug: "psicologia",
+        description: "Grupo de apoio e atendimento individual.",
+      },
+      {
+        id: "sec-fisioterapia",
+        name: "Fisioterapia oncológica",
+        slug: "fisioterapia",
+        description: "Reabilitação pós-cirúrgica e linfedema.",
+      },
+      {
+        id: "sec-assistencia-social",
+        name: "Assistência social",
+        slug: "assistencia_social",
+        description: "Apoio com documentação, benefícios e auxílio social.",
+      },
+      {
+        id: "sec-nutricao",
+        name: "Nutrição",
+        slug: "nutricao",
+        description: "Acompanhamento nutricional durante o tratamento.",
       },
     ],
     volunteerHours: [

@@ -44,6 +44,14 @@ export type AppointmentReferral =
   | "outro"
   | null;
 
+export interface Sector {
+  id: string;
+  name: string;
+  // slug bate com AppointmentReferral quando aplicável; fora isso vira "outro"
+  slug: NonNullable<AppointmentReferral>;
+  description?: string;
+}
+
 export interface Appointment {
   id: string;
   patientId: string;

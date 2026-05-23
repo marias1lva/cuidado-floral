@@ -1,4 +1,4 @@
-import { apiRequest } from "./api";
+import { apiRequest, getAuthToken, setAuthToken } from "./api";
 import type {
   Appointment,
   AppNotification,
@@ -11,6 +11,12 @@ export function buildAppointmentId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? `apt-${crypto.randomUUID()}`
     : `apt-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+}
+
+export function buildNotificationId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? `nt-${crypto.randomUUID()}`
+    : `nt-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 }
 
 export function loadAppointments(): Promise<Appointment[]> {
@@ -45,10 +51,16 @@ export async function uploadAttachments(
   files.forEach((file, index) => {
     formData.append(`file${index}`, file, file.name);
   });
+  const token = getAuthToken();
   const response = await fetch(`${API_BASE_URL}/uploads`, {
     method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     body: formData,
   });
+  if (response.status === 401) {
+    setAuthToken(null);
+    throw new Error("Sessão expirada. Faça login novamente.");
+  }
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as {
       message?: string;

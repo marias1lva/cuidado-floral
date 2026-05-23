@@ -22,10 +22,15 @@ import { VolunteerAgenda } from "./volunteer-hours/volunteer-agenda";
 import { VolunteerHoursList } from "./volunteer-hours/volunteer-hours-list";
 import { VolunteerHoursModal } from "./volunteer-hours/volunteer-hours-modal";
 import {
+  buildAppointmentId,
+  buildNotificationId,
   loadAppointments,
+  loadNotifications,
   saveAppointments,
+  saveNotifications,
 } from "./domain/patient-data";
 import { loadPatients, savePatients } from "./domain/patients-data";
+import { loadSectors } from "./domain/sectors-data";
 import { DEMO_VOLUNTEER_NAME } from "./domain/storage";
 import {
   loadVolunteerAgenda,
@@ -34,11 +39,17 @@ import {
 } from "./domain/volunteer-data";
 import type {
   Appointment,
+  AppNotification,
   Patient,
   PatientPriority,
   PatientWorkflowStatus,
+  Sector,
 } from "./domain/types";
 import { PatientHistoryModal } from "./user-area/patient/patient-history-modal";
+import {
+  ForwardPatientModal,
+  type ForwardPayload,
+} from "./user-area/patient/forward-patient-modal";
 import { formatDateBR } from "./user-area/patient/patient-utils";
 import type {
   VolunteerAgendaItem,
@@ -104,13 +115,17 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [patientList, setPatientList] = useState<Patient[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [sectors, setSectors] = useState<Sector[]>([]);
   const [activeTab, setActiveTab] = useState<VolunteerAreaTab>("patients");
   const [isHoursModalOpen, setIsHoursModalOpen] = useState(false);
   const [historyPatientId, setHistoryPatientId] = useState<string | null>(null);
+  const [forwardingPatientId, setForwardingPatientId] = useState<string | null>(null);
   const [volunteerHours, setVolunteerHours] = useState<VolunteerHourEntry[]>([]);
   const [volunteerAgenda, setVolunteerAgenda] = useState<VolunteerAgendaItem[]>([]);
   const [hasLoadedPatients, setHasLoadedPatients] = useState(false);
   const [hasLoadedAppointments, setHasLoadedAppointments] = useState(false);
+  const [hasLoadedNotifications, setHasLoadedNotifications] = useState(false);
   const [hasLoadedVolunteerHours, setHasLoadedVolunteerHours] = useState(false);
 
   useEffect(() => {
@@ -119,17 +134,22 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
     void Promise.all([
       loadPatients(),
       loadAppointments(),
+      loadNotifications(),
+      loadSectors(),
       loadVolunteerHours(),
       loadVolunteerAgenda(),
     ])
-      .then(([patients, loadedAppointments, hours, agenda]) => {
+      .then(([patients, loadedAppointments, loadedNotifications, loadedSectors, hours, agenda]) => {
         if (!isMounted) return;
         setPatientList(patients);
         setAppointments(loadedAppointments);
+        setNotifications(loadedNotifications);
+        setSectors(loadedSectors);
         setVolunteerHours(hours);
         setVolunteerAgenda(agenda);
         setHasLoadedPatients(true);
         setHasLoadedAppointments(true);
+        setHasLoadedNotifications(true);
         setHasLoadedVolunteerHours(true);
       })
       .catch((error) => {
@@ -154,6 +174,13 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
       console.error("Falha ao salvar atendimentos", error);
     });
   }, [appointments, hasLoadedAppointments]);
+
+  useEffect(() => {
+    if (!hasLoadedNotifications) return;
+    void saveNotifications(notifications).catch((error) => {
+      console.error("Falha ao salvar notificações", error);
+    });
+  }, [notifications, hasLoadedNotifications]);
 
   useEffect(() => {
     if (!hasLoadedVolunteerHours) return;
@@ -193,10 +220,62 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
     return map;
   }, [appointments]);
 
-  function handleForward(id: string) {
+  function handleStartForward(id: string) {
+    setForwardingPatientId(id);
+  }
+
+  function handleConfirmForward({ sector, observations }: ForwardPayload) {
+    const patient = patientList.find((p) => p.id === forwardingPatientId);
+    if (!patient) {
+      setForwardingPatientId(null);
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const today = now.slice(0, 10);
+
+    const detalhe = observations
+      ? `${sector.name} — ${observations}`
+      : sector.name;
+
+    const referralAppointment: Appointment = {
+      id: buildAppointmentId(),
+      patientId: patient.id,
+      patientName: patient.name,
+      date: today,
+      volunteerName: DEMO_VOLUNTEER_NAME,
+      status: "encaminhado",
+      observacoes: `Encaminhamento para ${sector.name}.${
+        observations ? ` ${observations}` : ""
+      }`,
+      encaminhamento: sector.slug,
+      encaminhamentoDetalhe: detalhe,
+      createdBy: "voluntaria",
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const notification: AppNotification = {
+      id: buildNotificationId(),
+      recipientRole: "paciente",
+      recipientId: patient.id,
+      type: "atendimento",
+      title: "Encaminhamento realizado",
+      message: `Você foi encaminhada para ${sector.name}.${
+        observations ? ` ${observations}` : ""
+      }`,
+      date: now,
+      read: false,
+    };
+
     setPatientList((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, status: "encaminhado" } : p)),
+      prev.map((p) =>
+        p.id === patient.id ? { ...p, status: "encaminhado" } : p,
+      ),
     );
+    setAppointments((current) => [referralAppointment, ...current]);
+    setNotifications((current) => [notification, ...current]);
+    setForwardingPatientId(null);
   }
 
   function handleComplete(id: string) {
@@ -446,7 +525,7 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
                           {patient.status === "pendente" && (
                             <Button
                               size="sm"
-                              onClick={() => handleForward(patient.id)}
+                              onClick={() => handleStartForward(patient.id)}
                               className="rounded-full bg-[var(--primary)] hover:bg-[var(--primary)]/90 text-white shadow-sm shadow-pink-200 text-xs"
                             >
                               <Send size={13} />
@@ -556,6 +635,16 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
           onDelete={handleDeleteAppointment}
         />
       )}
+
+      <ForwardPatientModal
+        open={forwardingPatientId !== null}
+        patient={
+          patientList.find((p) => p.id === forwardingPatientId) ?? null
+        }
+        sectors={sectors}
+        onClose={() => setForwardingPatientId(null)}
+        onConfirm={handleConfirmForward}
+      />
     </div>
   );
 }

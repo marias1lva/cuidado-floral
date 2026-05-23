@@ -3,10 +3,13 @@ import { resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { createWriteStream } from "node:fs";
 import Fastify from "fastify";
+import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
-import type { ManagedUser } from "../src/admin/types";
+import jwt from "@fastify/jwt";
+import bcrypt from "bcryptjs";
+import type { ManagedUser, ManagedUserRole } from "../src/admin/types";
 import type {
   AppNotification,
   Appointment,
@@ -15,20 +18,37 @@ import type {
   Patient,
 } from "../src/domain/types";
 import type { VolunteerHourEntry } from "../src/volunteer-hours/types";
+import { hashPasswordSync } from "./mock-data";
 import { readStore, toManagedUsers, writeStore } from "./store";
 
 const UPLOADS_DIR = resolve(process.cwd(), "server/data/uploads");
 await mkdir(UPLOADS_DIR, { recursive: true });
 
+const JWT_SECRET =
+  process.env.JWT_SECRET ?? "cuidado-floral-dev-secret-change-me";
+
+interface AuthPayload {
+  sub: number;
+  role: ManagedUserRole;
+  name: string;
+}
+
+declare module "@fastify/jwt" {
+  interface FastifyJWT {
+    payload: AuthPayload;
+    user: AuthPayload;
+  }
+}
+
 const app = Fastify({ logger: false });
 
-await app.register(cors, {
-  origin: true,
-});
+await app.register(cors, { origin: true });
+
+await app.register(jwt, { secret: JWT_SECRET });
 
 await app.register(multipart, {
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10 MB por arquivo
+    fileSize: 10 * 1024 * 1024,
     files: 10,
   },
 });
@@ -39,6 +59,29 @@ await app.register(fastifyStatic, {
   decorateReply: false,
 });
 
+const PUBLIC_PATHS = new Set(["/api/health", "/api/auth/login"]);
+
+app.addHook("onRequest", async (request, reply) => {
+  if (!request.url.startsWith("/api/")) return;
+  if (PUBLIC_PATHS.has(request.url.split("?")[0])) return;
+
+  try {
+    await request.jwtVerify();
+  } catch {
+    return reply.status(401).send({ message: "Sessão expirada ou inválida." });
+  }
+});
+
+function requireRole(allowed: ManagedUserRole[]): preHandlerHookHandler {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!request.user || !allowed.includes(request.user.role)) {
+      return reply
+        .status(403)
+        .send({ message: "Você não tem permissão para esta ação." });
+    }
+  };
+}
+
 function safeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120) || "arquivo";
 }
@@ -47,6 +90,8 @@ function makeUploadId(): string {
   return `att-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
 }
 
+// ── Públicas ───────────────────────────────────────────
+
 app.get("/api/health", async () => ({ status: "ok" }));
 
 app.post<{ Body: { email?: string; password?: string } }>(
@@ -54,102 +99,172 @@ app.post<{ Body: { email?: string; password?: string } }>(
   async (request, reply) => {
     const email = request.body.email?.trim().toLowerCase();
     const password = request.body.password ?? "";
+    if (!email || !password) {
+      return reply.status(400).send({ message: "Informe e-mail e senha." });
+    }
+
     const store = await readStore();
     const user = store.users.find(
       (item) =>
-        item.email.trim().toLowerCase() === email &&
-        item.password === password &&
-        item.status === "Ativo",
+        item.email.trim().toLowerCase() === email && item.status === "Ativo",
     );
 
-    if (!user) {
+    if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
       return reply.status(401).send({
         message: "E-mail ou senha incorretos. Por favor, tente novamente.",
       });
     }
 
-    return { role: user.type };
+    const token = app.jwt.sign(
+      { sub: user.id, role: user.type, name: user.name },
+      { expiresIn: "12h" },
+    );
+
+    return { token, role: user.type, name: user.name };
   },
 );
 
-app.get("/api/patients", async () => {
-  const store = await readStore();
-  return store.patients;
-});
+// ── Protegidas ─────────────────────────────────────────
 
-app.put<{ Body: Patient[] }>("/api/patients", async (request) => {
-  const store = await readStore();
-  store.patients = request.body;
-  await writeStore(store);
-  return store.patients;
-});
+const ALL_ROLES: ManagedUserRole[] = ["admin", "voluntaria", "paciente", "doador"];
 
-app.get("/api/appointments", async () => {
-  const store = await readStore();
-  return store.appointments;
-});
+app.get(
+  "/api/patients",
+  { preHandler: requireRole(["admin", "voluntaria"]) },
+  async () => {
+    const store = await readStore();
+    return store.patients;
+  },
+);
 
-app.put<{ Body: Appointment[] }>("/api/appointments", async (request) => {
-  const store = await readStore();
-  store.appointments = request.body;
-  await writeStore(store);
-  return store.appointments;
-});
+app.put<{ Body: Patient[] }>(
+  "/api/patients",
+  { preHandler: requireRole(["admin", "voluntaria"]) },
+  async (request) => {
+    const store = await readStore();
+    store.patients = request.body;
+    await writeStore(store);
+    return store.patients;
+  },
+);
 
-app.get("/api/notifications", async () => {
-  const store = await readStore();
-  return store.notifications;
-});
+app.get(
+  "/api/appointments",
+  { preHandler: requireRole(["admin", "voluntaria", "paciente"]) },
+  async () => {
+    const store = await readStore();
+    return store.appointments;
+  },
+);
 
-app.put<{ Body: AppNotification[] }>("/api/notifications", async (request) => {
-  const store = await readStore();
-  store.notifications = request.body;
-  await writeStore(store);
-  return store.notifications;
-});
+app.put<{ Body: Appointment[] }>(
+  "/api/appointments",
+  { preHandler: requireRole(["admin", "voluntaria", "paciente"]) },
+  async (request) => {
+    const store = await readStore();
+    store.appointments = request.body;
+    await writeStore(store);
+    return store.appointments;
+  },
+);
 
-app.get("/api/donations", async () => {
-  const store = await readStore();
-  return store.donations;
-});
+app.get(
+  "/api/notifications",
+  { preHandler: requireRole(ALL_ROLES) },
+  async () => {
+    const store = await readStore();
+    return store.notifications;
+  },
+);
 
-app.put<{ Body: Donation[] }>("/api/donations", async (request) => {
-  const store = await readStore();
-  store.donations = request.body;
-  await writeStore(store);
-  return store.donations;
-});
+app.put<{ Body: AppNotification[] }>(
+  "/api/notifications",
+  { preHandler: requireRole(["admin", "voluntaria", "paciente"]) },
+  async (request) => {
+    const store = await readStore();
+    store.notifications = request.body;
+    await writeStore(store);
+    return store.notifications;
+  },
+);
 
-app.get("/api/users", async () => {
-  const store = await readStore();
-  return toManagedUsers(store.users);
-});
+app.get(
+  "/api/donations",
+  { preHandler: requireRole(["admin", "doador"]) },
+  async () => {
+    const store = await readStore();
+    return store.donations;
+  },
+);
 
-app.put<{ Body: ManagedUser[] }>("/api/users", async (request) => {
-  const store = await readStore();
-  store.users = request.body.map((user) => {
-    const existing = store.users.find((current) => current.id === user.id);
-    return {
-      ...user,
-      password: existing?.password ?? "123",
-    };
-  });
-  await writeStore(store);
-  return toManagedUsers(store.users);
-});
+app.put<{ Body: Donation[] }>(
+  "/api/donations",
+  { preHandler: requireRole(["admin", "doador"]) },
+  async (request) => {
+    const store = await readStore();
+    store.donations = request.body;
+    await writeStore(store);
+    return store.donations;
+  },
+);
 
-app.get("/api/campaigns", async () => {
-  const store = await readStore();
-  return store.campaigns;
-});
+app.get(
+  "/api/users",
+  { preHandler: requireRole(["admin"]) },
+  async () => {
+    const store = await readStore();
+    return toManagedUsers(store.users);
+  },
+);
 
-app.get("/api/volunteer-hours", async () => {
-  const store = await readStore();
-  return store.volunteerHours;
-});
+app.put<{ Body: ManagedUser[] }>(
+  "/api/users",
+  { preHandler: requireRole(["admin"]) },
+  async (request) => {
+    const store = await readStore();
+    const defaultHash = hashPasswordSync("123");
+    store.users = request.body.map((user) => {
+      const existing = store.users.find((current) => current.id === user.id);
+      return {
+        ...user,
+        passwordHash: existing?.passwordHash ?? defaultHash,
+      };
+    });
+    await writeStore(store);
+    return toManagedUsers(store.users);
+  },
+);
+
+app.get(
+  "/api/campaigns",
+  { preHandler: requireRole(ALL_ROLES) },
+  async () => {
+    const store = await readStore();
+    return store.campaigns;
+  },
+);
+
+app.get(
+  "/api/sectors",
+  { preHandler: requireRole(ALL_ROLES) },
+  async () => {
+    const store = await readStore();
+    return store.sectors;
+  },
+);
+
+app.get(
+  "/api/volunteer-hours",
+  { preHandler: requireRole(["admin", "voluntaria"]) },
+  async () => {
+    const store = await readStore();
+    return store.volunteerHours;
+  },
+);
 
 app.put<{ Body: VolunteerHourEntry[] }>(
   "/api/volunteer-hours",
+  { preHandler: requireRole(["admin", "voluntaria"]) },
   async (request) => {
     const store = await readStore();
     store.volunteerHours = request.body;
@@ -158,45 +273,53 @@ app.put<{ Body: VolunteerHourEntry[] }>(
   },
 );
 
-app.get("/api/volunteer-agenda", async () => {
-  const store = await readStore();
-  return store.volunteerAgenda;
-});
+app.get(
+  "/api/volunteer-agenda",
+  { preHandler: requireRole(["admin", "voluntaria"]) },
+  async () => {
+    const store = await readStore();
+    return store.volunteerAgenda;
+  },
+);
 
-app.post("/api/uploads", async (request, reply) => {
-  const parts = request.files();
-  const uploaded: AppointmentAttachment[] = [];
+app.post(
+  "/api/uploads",
+  { preHandler: requireRole(ALL_ROLES) },
+  async (request, reply) => {
+    const parts = request.files();
+    const uploaded: AppointmentAttachment[] = [];
 
-  for await (const part of parts) {
-    const id = makeUploadId();
-    const folder = resolve(UPLOADS_DIR, id);
-    await mkdir(folder, { recursive: true });
+    for await (const part of parts) {
+      const id = makeUploadId();
+      const folder = resolve(UPLOADS_DIR, id);
+      await mkdir(folder, { recursive: true });
 
-    const filename = safeFilename(part.filename);
-    const fullPath = resolve(folder, filename);
+      const filename = safeFilename(part.filename);
+      const fullPath = resolve(folder, filename);
 
-    await pipeline(part.file, createWriteStream(fullPath));
+      await pipeline(part.file, createWriteStream(fullPath));
 
-    if (part.file.truncated) {
-      return reply.status(413).send({
-        message: "Arquivo excede o limite de 10 MB.",
+      if (part.file.truncated) {
+        return reply.status(413).send({
+          message: "Arquivo excede o limite de 10 MB.",
+        });
+      }
+
+      const { size } = await stat(fullPath);
+
+      uploaded.push({
+        id,
+        filename,
+        mimeType: part.mimetype,
+        size,
+        url: `/uploads/${id}/${filename}`,
+        uploadedAt: new Date().toISOString(),
       });
     }
 
-    const { size } = await stat(fullPath);
-
-    uploaded.push({
-      id,
-      filename,
-      mimeType: part.mimetype,
-      size,
-      url: `/uploads/${id}/${filename}`,
-      uploadedAt: new Date().toISOString(),
-    });
-  }
-
-  return uploaded;
-});
+    return uploaded;
+  },
+);
 
 await app.listen({
   host: "0.0.0.0",

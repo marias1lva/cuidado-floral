@@ -32,5 +32,5 @@ export async function resetStore(): Promise<AppData> {
 }
 
 export function toManagedUsers(users: StoredUser[]): ManagedUser[] {
-  return users.map(({ password: _password, ...user }) => user);
+  return users.map(({ passwordHash: _passwordHash, ...user }) => user);
 }
