@@ -101,6 +101,9 @@ export interface Donation {
   description?: string;
   deliveryMethod?: DonationDeliveryMethod;
   notes?: string;
+  // Comprovante rastreável (RF12, RN13) — gerado em doações financeiras
+  protocol?: string;
+  receiptIssuedAt?: string; // ISO datetime
 }
 
 export type NotificationType =

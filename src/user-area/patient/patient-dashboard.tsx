@@ -255,6 +255,27 @@ function PatientRequestAppointmentModal({
   function handleAddFiles(event: React.ChangeEvent<HTMLInputElement>) {
     const newFiles = Array.from(event.target.files ?? []);
     if (newFiles.length === 0) return;
+
+    const allowedExt = ["pdf", "jpg", "jpeg"];
+    const allowedMime = ["application/pdf", "image/jpeg", "image/jpg"];
+    const invalid = newFiles.filter((file) => {
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+      const mimeOk = allowedMime.includes(file.type.toLowerCase());
+      const extOk = allowedExt.includes(ext);
+      return !mimeOk && !extOk;
+    });
+
+    if (invalid.length > 0) {
+      setError(
+        `Formato inválido em ${invalid
+          .map((f) => f.name)
+          .join(", ")}. Envie apenas PDF ou JPG.`,
+      );
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    setError(null);
     setFiles((current) => [...current, ...newFiles]);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
@@ -401,6 +422,7 @@ function PatientRequestAppointmentModal({
             ref={fileInputRef}
             type="file"
             multiple
+            accept=".pdf,.jpg,.jpeg,application/pdf,image/jpeg"
             onChange={handleAddFiles}
             className="block w-full text-sm text-[var(--muted-foreground)] file:mr-3 file:rounded-full file:border-0 file:bg-pink-100 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-pink-700 hover:file:bg-pink-200"
           />
@@ -431,7 +453,7 @@ function PatientRequestAppointmentModal({
             </ul>
           )}
           <p className="mt-2 text-xs text-[var(--muted-foreground)]">
-            Até 10 arquivos, 10 MB cada.
+            Apenas PDF ou JPG. Até 10 arquivos, 10 MB cada.
           </p>
         </div>
 

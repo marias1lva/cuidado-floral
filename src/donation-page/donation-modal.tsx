@@ -10,7 +10,7 @@ import { DonationChoice } from "./donation-choice";
 import { FinancialDonation } from "./donation-financial";
 import { MaterialDonation } from "./donation-material";
 import { DonationConfirmation } from "./donation-confirmation";
-import { buildDonationId } from "../domain/donor-data";
+import { buildDonationId, buildDonationProtocol } from "../domain/donor-data";
 import { DEMO_DONOR_ID, DEMO_DONOR_NAME } from "../domain/storage";
 import type { Donation } from "../domain/types";
 
@@ -45,15 +45,18 @@ export function DonationModal({ isOpen, onClose, onCreate }: DonationModalProps)
   }
 
   function handleFinancialConfirm(form: FinancialDonationForm) {
+    const now = new Date().toISOString();
     const donation: Donation = {
       id: buildDonationId(),
       donorId: DEMO_DONOR_ID,
       donorName: form.nome.trim() || DEMO_DONOR_NAME,
       donorPhone: form.telefone.trim() || undefined,
       kind: "financeira",
-      date: new Date().toISOString(),
+      date: now,
       status: "pendente",
       amount: parseAmount(form.valorEstimado),
+      protocol: buildDonationProtocol(),
+      receiptIssuedAt: now,
     };
     onCreate?.(donation);
     setStep("confirmacao");

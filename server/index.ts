@@ -90,6 +90,20 @@ function makeUploadId(): string {
   return `att-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
 }
 
+// Whitelist de formatos aceitos para anexos (RF14).
+const ALLOWED_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/jpg",
+]);
+const ALLOWED_EXTENSIONS = new Set(["pdf", "jpg", "jpeg"]);
+
+function isAllowedAttachment(filename: string, mimeType: string): boolean {
+  if (ALLOWED_MIME_TYPES.has(mimeType.toLowerCase())) return true;
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  return ALLOWED_EXTENSIONS.has(ext);
+}
+
 // ── Públicas ───────────────────────────────────────────
 
 app.get("/api/health", async () => ({ status: "ok" }));
@@ -290,11 +304,19 @@ app.post(
     const uploaded: AppointmentAttachment[] = [];
 
     for await (const part of parts) {
+      const filename = safeFilename(part.filename);
+
+      if (!isAllowedAttachment(filename, part.mimetype)) {
+        // Drena o stream pra não travar a conexão e responde 415.
+        await part.toBuffer().catch(() => undefined);
+        return reply.status(415).send({
+          message: `Formato não suportado em "${part.filename}". Envie apenas PDF ou JPG.`,
+        });
+      }
+
       const id = makeUploadId();
       const folder = resolve(UPLOADS_DIR, id);
       await mkdir(folder, { recursive: true });
-
-      const filename = safeFilename(part.filename);
       const fullPath = resolve(folder, filename);
 
       await pipeline(part.file, createWriteStream(fullPath));

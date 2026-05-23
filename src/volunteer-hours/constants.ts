@@ -14,6 +14,8 @@ export const activityCategoryOptions: Array<{
 export const initialVolunteerHours: VolunteerHourEntry[] = [
   {
     id: 1,
+    volunteerId: "demo-voluntaria-1",
+    volunteerName: "Ana Voluntária",
     activityName: "Apoio no balcão de atendimento",
     category: "acolhimento",
     date: "2026-04-03",
@@ -24,6 +26,8 @@ export const initialVolunteerHours: VolunteerHourEntry[] = [
   },
   {
     id: 2,
+    volunteerId: "demo-voluntaria-1",
+    volunteerName: "Ana Voluntária",
     activityName: "Organização de materiais da campanha",
     category: "campanha",
     date: "2026-04-05",

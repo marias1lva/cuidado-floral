@@ -36,6 +36,7 @@ import { loadDonations } from "../domain/donor-data";
 import { loadVolunteerHours } from "../domain/volunteer-data";
 import {
   buildCsv,
+  consolidateVolunteerHoursByVolunteer,
   downloadCsv,
   downloadPdfReport,
   isWithinRange,
@@ -44,6 +45,7 @@ import {
   summarizeVolunteerHours,
   type CsvColumn,
   type DateRange,
+  type VolunteerConsolidation,
 } from "../domain/reports";
 import type {
   Appointment,
@@ -151,6 +153,10 @@ export function AdminReports() {
     () => summarizeVolunteerHours(filteredVolunteerHours),
     [filteredVolunteerHours],
   );
+  const volunteerConsolidation = useMemo(
+    () => consolidateVolunteerHoursByVolunteer(filteredVolunteerHours),
+    [filteredVolunteerHours],
+  );
 
   // Colunas reutilizadas para CSV e PDF
   const appointmentColumns: CsvColumn<Appointment>[] = [
@@ -190,6 +196,7 @@ export function AdminReports() {
 
   const volunteerHoursColumns: CsvColumn<VolunteerHourEntry>[] = [
     { header: "Data", value: (row) => formatDateBR(row.date) },
+    { header: "Voluntária", value: (row) => row.volunteerName },
     { header: "Atividade", value: (row) => row.activityName },
     {
       header: "Categoria",
@@ -198,6 +205,23 @@ export function AdminReports() {
     { header: "Local", value: (row) => row.location },
     { header: "Horas", value: (row) => row.hours.toFixed(1).replace(".", ",") },
     { header: "Observações", value: (row) => row.notes },
+  ];
+
+  const volunteerConsolidationColumns: CsvColumn<VolunteerConsolidation>[] = [
+    { header: "Voluntária", value: (row) => row.volunteerName },
+    {
+      header: "Total de horas",
+      value: (row) => `${row.totalHours.toFixed(1).replace(".", ",")} h`,
+    },
+    { header: "Registros", value: (row) => row.entries },
+    { header: "Atividades", value: (row) => row.activities.join("; ") },
+    {
+      header: "Período",
+      value: (row) =>
+        row.periodStart && row.periodEnd
+          ? `${formatDateBR(row.periodStart)} a ${formatDateBR(row.periodEnd)}`
+          : "",
+    },
   ];
 
   function todayStamp() {
@@ -306,6 +330,10 @@ export function AdminReports() {
             value: volunteerHoursSummary.totalEntries.toString(),
           },
           {
+            label: "Voluntárias ativas",
+            value: volunteerConsolidation.length.toString(),
+          },
+          {
             label: "Atividades distintas",
             value: volunteerHoursSummary.uniqueActivities.toString(),
           },
@@ -314,11 +342,23 @@ export function AdminReports() {
       },
       [
         {
-          title: "Horas registradas",
+          title: "Consolidado por voluntária",
+          columns: volunteerConsolidationColumns,
+          rows: volunteerConsolidation,
+        },
+        {
+          title: "Horas registradas (detalhe)",
           columns: volunteerHoursColumns,
           rows: filteredVolunteerHours,
         },
       ],
+    );
+  }
+
+  function handleExportVolunteerConsolidationCsv() {
+    downloadCsv(
+      `horas-por-voluntaria-${todayStamp()}.csv`,
+      buildCsv(volunteerConsolidation, volunteerConsolidationColumns),
     );
   }
 
@@ -721,6 +761,7 @@ export function AdminReports() {
                 <thead>
                   <tr className="bg-pink-100 text-slate-800">
                     <th className="px-3 py-2 font-semibold">Data</th>
+                    <th className="px-3 py-2 font-semibold">Voluntária</th>
                     <th className="px-3 py-2 font-semibold">Atividade</th>
                     <th className="px-3 py-2 font-semibold">Categoria</th>
                     <th className="px-3 py-2 font-semibold">Local</th>
@@ -736,6 +777,7 @@ export function AdminReports() {
                       <td className="px-3 py-2 align-top whitespace-nowrap">
                         {formatDateBR(entry.date)}
                       </td>
+                      <td className="px-3 py-2 align-top">{entry.volunteerName}</td>
                       <td className="px-3 py-2 align-top">{entry.activityName}</td>
                       <td className="px-3 py-2 align-top">
                         <Badge
@@ -750,6 +792,97 @@ export function AdminReports() {
                       </td>
                       <td className="px-3 py-2 align-top text-right font-semibold text-amber-700">
                         {entry.hours.toFixed(1).replace(".", ",")} h
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-3xl border border-pink-100 bg-white p-6 shadow-sm shadow-pink-100/40">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100">
+              <Users className="h-5 w-5 text-amber-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-[var(--primary)]">
+                Consolidado por voluntária
+              </h2>
+              <p className="text-sm text-[var(--muted-foreground)]">
+                {volunteerConsolidation.length}{" "}
+                {volunteerConsolidation.length === 1
+                  ? "voluntária ativa"
+                  : "voluntárias ativas"} no recorte (RN12).
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            onClick={handleExportVolunteerConsolidationCsv}
+            disabled={volunteerConsolidation.length === 0}
+            className="rounded-full border-pink-300 text-pink-700 hover:bg-pink-50"
+          >
+            <Download size={14} />
+            CSV consolidado
+          </Button>
+        </div>
+
+        {volunteerConsolidation.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-pink-100 bg-pink-50/40 p-6 text-center text-sm text-[var(--muted-foreground)]">
+            Nenhuma voluntária com registros no recorte atual.
+          </p>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-pink-100">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="bg-pink-100 text-slate-800">
+                    <th className="px-3 py-2 font-semibold">Voluntária</th>
+                    <th className="px-3 py-2 font-semibold text-right">Total</th>
+                    <th className="px-3 py-2 font-semibold text-right">Registros</th>
+                    <th className="px-3 py-2 font-semibold">Atividades</th>
+                    <th className="px-3 py-2 font-semibold">Período</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {volunteerConsolidation.map((row) => (
+                    <tr
+                      key={row.volunteerName}
+                      className="border-t border-pink-100 hover:bg-pink-50/60"
+                    >
+                      <td className="px-3 py-2 align-top font-semibold">
+                        {row.volunteerName}
+                      </td>
+                      <td className="px-3 py-2 align-top text-right font-semibold text-amber-700 whitespace-nowrap">
+                        {row.totalHours.toFixed(1).replace(".", ",")} h
+                      </td>
+                      <td className="px-3 py-2 align-top text-right text-[var(--muted-foreground)]">
+                        {row.entries}
+                      </td>
+                      <td className="px-3 py-2 align-top text-[var(--muted-foreground)]">
+                        {row.activities.length > 0 ? (
+                          <ul className="list-disc pl-4">
+                            {row.activities.slice(0, 4).map((act) => (
+                              <li key={act}>{act}</li>
+                            ))}
+                            {row.activities.length > 4 && (
+                              <li className="italic">
+                                +{row.activities.length - 4} outras
+                              </li>
+                            )}
+                          </ul>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="px-3 py-2 align-top text-[var(--muted-foreground)] whitespace-nowrap">
+                        {row.periodStart && row.periodEnd
+                          ? `${formatDateBR(row.periodStart)} a ${formatDateBR(row.periodEnd)}`
+                          : "—"}
                       </td>
                     </tr>
                   ))}

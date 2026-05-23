@@ -7,6 +7,8 @@ export type VolunteerActivityCategory =
 
 export interface VolunteerHourEntry {
   id: number;
+  volunteerId?: string;
+  volunteerName: string;
   activityName: string;
   category: VolunteerActivityCategory;
   date: string;

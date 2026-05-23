@@ -76,6 +76,60 @@ export interface VolunteerHoursSummary {
   byCategory: Record<string, number>;
 }
 
+export interface VolunteerConsolidation {
+  volunteerName: string;
+  totalHours: number;
+  entries: number;
+  activities: string[];
+  periodStart?: string; // YYYY-MM-DD
+  periodEnd?: string; // YYYY-MM-DD
+}
+
+export function consolidateVolunteerHoursByVolunteer(
+  items: VolunteerHourEntry[],
+): VolunteerConsolidation[] {
+  const map = new Map<
+    string,
+    {
+      totalHours: number;
+      entries: number;
+      activities: Set<string>;
+      periodStart?: string;
+      periodEnd?: string;
+    }
+  >();
+
+  items.forEach((entry) => {
+    const key = entry.volunteerName || "(não atribuído)";
+    const current = map.get(key) ?? {
+      totalHours: 0,
+      entries: 0,
+      activities: new Set<string>(),
+    };
+    current.totalHours += entry.hours;
+    current.entries += 1;
+    current.activities.add(entry.activityName);
+    if (!current.periodStart || entry.date < current.periodStart) {
+      current.periodStart = entry.date;
+    }
+    if (!current.periodEnd || entry.date > current.periodEnd) {
+      current.periodEnd = entry.date;
+    }
+    map.set(key, current);
+  });
+
+  return Array.from(map.entries())
+    .map(([volunteerName, data]) => ({
+      volunteerName,
+      totalHours: data.totalHours,
+      entries: data.entries,
+      activities: Array.from(data.activities).sort(),
+      periodStart: data.periodStart,
+      periodEnd: data.periodEnd,
+    }))
+    .sort((a, b) => b.totalHours - a.totalHours);
+}
+
 export function summarizeVolunteerHours(
   items: VolunteerHourEntry[],
 ): VolunteerHoursSummary {

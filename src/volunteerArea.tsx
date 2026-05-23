@@ -31,7 +31,7 @@ import {
 } from "./domain/patient-data";
 import { loadPatients, savePatients } from "./domain/patients-data";
 import { loadSectors } from "./domain/sectors-data";
-import { DEMO_VOLUNTEER_NAME } from "./domain/storage";
+import { DEMO_VOLUNTEER_ID, DEMO_VOLUNTEER_NAME } from "./domain/storage";
 import {
   loadVolunteerAgenda,
   loadVolunteerHours,
@@ -623,6 +623,8 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
         open={isHoursModalOpen}
         onClose={() => setIsHoursModalOpen(false)}
         onSubmit={handleRegisterHours}
+        volunteerName={DEMO_VOLUNTEER_NAME}
+        volunteerId={DEMO_VOLUNTEER_ID}
       />
 
       {historyPatient && (

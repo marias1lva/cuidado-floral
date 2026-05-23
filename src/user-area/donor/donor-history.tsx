@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { Calendar, DollarSign, Download, Package, Scissors } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Calendar, DollarSign, Download, Package, Receipt, Scissors } from "lucide-react";
 
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
@@ -11,12 +11,14 @@ import {
   donationStatusLabel,
   formatCurrencyBRL,
 } from "./donor-utils";
+import { DonationReceiptModal } from "./donation-receipt-modal";
 
 interface DonorHistoryProps {
   donations: Donation[];
 }
 
 export function DonorHistory({ donations }: DonorHistoryProps) {
+  const [receiptDonation, setReceiptDonation] = useState<Donation | null>(null);
   const filtered = useMemo(() => {
     return [...donations].sort((a, b) => b.date.localeCompare(a.date));
   }, [donations]);
@@ -96,19 +98,42 @@ export function DonorHistory({ donations }: DonorHistoryProps) {
                   >
                     {renderDonationStatus(donation)}
                   </Badge>
-                  <Button
-                    variant="outline"
-                    className="rounded-full border-pink-300 bg-white px-5 text-[var(--foreground)] hover:bg-pink-50"
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    Comprovante
-                  </Button>
+                  {donation.protocol && (
+                    <span className="rounded-full bg-pink-100 px-3 py-1 font-mono text-[11px] font-semibold text-pink-700">
+                      {donation.protocol}
+                    </span>
+                  )}
+                  {donation.kind === "financeira" && donation.protocol ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => setReceiptDonation(donation)}
+                      className="rounded-full border-pink-300 bg-white px-5 text-[var(--foreground)] hover:bg-pink-50"
+                    >
+                      <Receipt className="mr-2 h-4 w-4" />
+                      Comprovante
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      disabled
+                      className="rounded-full border-pink-300 bg-white px-5 text-[var(--muted-foreground)]"
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Comprovante
+                    </Button>
+                  )}
                 </div>
               </div>
             </li>
           ))}
         </ul>
       )}
+
+      <DonationReceiptModal
+        donation={receiptDonation}
+        open={receiptDonation !== null}
+        onClose={() => setReceiptDonation(null)}
+      />
     </section>
   );
 }
