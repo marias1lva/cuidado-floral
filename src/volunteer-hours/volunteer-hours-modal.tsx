@@ -18,6 +18,8 @@ interface VolunteerHoursModalProps {
   open: boolean;
   onClose: () => void;
   onSubmit: (entry: VolunteerHourEntry) => void;
+  volunteerName: string;
+  volunteerId?: string;
 }
 
 interface FormState {
@@ -46,6 +48,8 @@ export function VolunteerHoursModal({
   open,
   onClose,
   onSubmit,
+  volunteerName,
+  volunteerId,
 }: VolunteerHoursModalProps) {
   const [form, setForm] = useState<FormState>(initialFormState);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>(
@@ -110,6 +114,8 @@ export function VolunteerHoursModal({
 
     onSubmit({
       id: Date.now(),
+      volunteerId,
+      volunteerName,
       activityName: form.activityName.trim(),
       category: form.category,
       date: form.date,

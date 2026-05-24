@@ -4,7 +4,9 @@ import {
   ArrowRight,
   CalendarDays,
   ClipboardList,
+  Clock,
   Download,
+  FileDown,
   HandHeart,
   PiggyBank,
   Send,
@@ -31,14 +33,19 @@ import {
 
 import { loadAppointments } from "../domain/patient-data";
 import { loadDonations } from "../domain/donor-data";
+import { loadVolunteerHours } from "../domain/volunteer-data";
 import {
   buildCsv,
+  consolidateVolunteerHoursByVolunteer,
   downloadCsv,
+  downloadPdfReport,
   isWithinRange,
   summarizeAppointments,
   summarizeDonations,
+  summarizeVolunteerHours,
   type CsvColumn,
   type DateRange,
+  type VolunteerConsolidation,
 } from "../domain/reports";
 import type {
   Appointment,
@@ -47,6 +54,8 @@ import type {
   DonationKind,
   DonationStatus,
 } from "../domain/types";
+import type { VolunteerHourEntry } from "../volunteer-hours/types";
+import { activityCategoryOptions } from "../volunteer-hours/constants";
 import {
   appointmentStatusBadgeClass,
   appointmentStatusLabel,
@@ -62,6 +71,10 @@ import {
   formatDateTimeBR,
 } from "../user-area/donor/donor-utils";
 
+const categoryLabelMap: Record<string, string> = Object.fromEntries(
+  activityCategoryOptions.map((opt) => [opt.value, opt.label]),
+);
+
 type AppointmentStatusFilter = "all" | AppointmentStatus;
 type DonationKindFilter = "all" | DonationKind;
 type DonationStatusFilter = "all" | DonationStatus;
@@ -69,6 +82,9 @@ type DonationStatusFilter = "all" | DonationStatus;
 export function AdminReports() {
   const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
   const [allDonations, setAllDonations] = useState<Donation[]>([]);
+  const [allVolunteerHours, setAllVolunteerHours] = useState<VolunteerHourEntry[]>(
+    [],
+  );
 
   const [range, setRange] = useState<DateRange>({});
   const [appointmentStatus, setAppointmentStatus] =
@@ -77,15 +93,15 @@ export function AdminReports() {
   const [donationStatus, setDonationStatus] =
     useState<DonationStatusFilter>("all");
 
-  // Carrega dos repositórios. Re-carrega ao trocar a aba via key na admin-area.
   useEffect(() => {
     let isMounted = true;
 
-    void Promise.all([loadAppointments(), loadDonations()])
-      .then(([appointments, donations]) => {
+    void Promise.all([loadAppointments(), loadDonations(), loadVolunteerHours()])
+      .then(([appointments, donations, hours]) => {
         if (!isMounted) return;
         setAllAppointments(appointments);
         setAllDonations(donations);
+        setAllVolunteerHours(hours);
       })
       .catch((error) => {
         console.error("Falha ao carregar relatórios", error);
@@ -117,6 +133,14 @@ export function AdminReports() {
     [allDonations, range, donationKind, donationStatus],
   );
 
+  const filteredVolunteerHours = useMemo(
+    () =>
+      allVolunteerHours
+        .filter((h) => isWithinRange(h.date, range))
+        .sort((a, b) => b.date.localeCompare(a.date)),
+    [allVolunteerHours, range],
+  );
+
   const appointmentsSummary = useMemo(
     () => summarizeAppointments(filteredAppointments),
     [filteredAppointments],
@@ -125,50 +149,216 @@ export function AdminReports() {
     () => summarizeDonations(filteredDonations),
     [filteredDonations],
   );
+  const volunteerHoursSummary = useMemo(
+    () => summarizeVolunteerHours(filteredVolunteerHours),
+    [filteredVolunteerHours],
+  );
+  const volunteerConsolidation = useMemo(
+    () => consolidateVolunteerHoursByVolunteer(filteredVolunteerHours),
+    [filteredVolunteerHours],
+  );
 
-  function handleExportAppointments() {
-    const columns: CsvColumn<Appointment>[] = [
-      { header: "Data", value: (row) => formatDateBR(row.date) },
-      { header: "Horário", value: (row) => row.time ?? "" },
-      { header: "Paciente", value: (row) => row.patientName },
-      { header: "Voluntária", value: (row) => row.volunteerName },
-      { header: "Status", value: (row) => appointmentStatusLabel[row.status] },
-      {
-        header: "Encaminhamento",
-        value: (row) => (row.encaminhamento ? referralLabel[row.encaminhamento] : ""),
-      },
-      { header: "Detalhe encaminhamento", value: (row) => row.encaminhamentoDetalhe ?? "" },
-      { header: "Observações", value: (row) => row.observacoes },
-    ];
+  // Colunas reutilizadas para CSV e PDF
+  const appointmentColumns: CsvColumn<Appointment>[] = [
+    { header: "Data", value: (row) => formatDateBR(row.date) },
+    { header: "Horário", value: (row) => row.time ?? "" },
+    { header: "Paciente", value: (row) => row.patientName },
+    { header: "Voluntária", value: (row) => row.volunteerName },
+    { header: "Status", value: (row) => appointmentStatusLabel[row.status] },
+    {
+      header: "Encaminhamento",
+      value: (row) =>
+        row.encaminhamento ? referralLabel[row.encaminhamento] : "",
+    },
+    { header: "Observações", value: (row) => row.observacoes },
+  ];
+
+  const donationColumns: CsvColumn<Donation>[] = [
+    { header: "Data", value: (row) => formatDateTimeBR(row.date) },
+    { header: "Doador", value: (row) => row.donorName },
+    { header: "Telefone", value: (row) => row.donorPhone ?? "" },
+    { header: "Tipo", value: (row) => donationKindLabel[row.kind] },
+    { header: "Status", value: (row) => donationStatusLabel[row.status] },
+    { header: "Campanha", value: (row) => row.campaign ?? "" },
+    {
+      header: "Valor",
+      value: (row) =>
+        row.amount !== undefined
+          ? row.amount.toFixed(2).replace(".", ",")
+          : "",
+    },
+    {
+      header: "Item",
+      value: (row) => (row.itemType ? donationItemLabel[row.itemType] : ""),
+    },
+    { header: "Quantidade", value: (row) => row.quantity ?? "" },
+  ];
+
+  const volunteerHoursColumns: CsvColumn<VolunteerHourEntry>[] = [
+    { header: "Data", value: (row) => formatDateBR(row.date) },
+    { header: "Voluntária", value: (row) => row.volunteerName },
+    { header: "Atividade", value: (row) => row.activityName },
+    {
+      header: "Categoria",
+      value: (row) => categoryLabelMap[row.category] ?? row.category,
+    },
+    { header: "Local", value: (row) => row.location },
+    { header: "Horas", value: (row) => row.hours.toFixed(1).replace(".", ",") },
+    { header: "Observações", value: (row) => row.notes },
+  ];
+
+  const volunteerConsolidationColumns: CsvColumn<VolunteerConsolidation>[] = [
+    { header: "Voluntária", value: (row) => row.volunteerName },
+    {
+      header: "Total de horas",
+      value: (row) => `${row.totalHours.toFixed(1).replace(".", ",")} h`,
+    },
+    { header: "Registros", value: (row) => row.entries },
+    { header: "Atividades", value: (row) => row.activities.join("; ") },
+    {
+      header: "Período",
+      value: (row) =>
+        row.periodStart && row.periodEnd
+          ? `${formatDateBR(row.periodStart)} a ${formatDateBR(row.periodEnd)}`
+          : "",
+    },
+  ];
+
+  function todayStamp() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function handleExportAppointmentsCsv() {
     downloadCsv(
-      `atendimentos-${new Date().toISOString().slice(0, 10)}.csv`,
-      buildCsv(filteredAppointments, columns),
+      `atendimentos-${todayStamp()}.csv`,
+      buildCsv(filteredAppointments, appointmentColumns),
     );
   }
 
-  function handleExportDonations() {
-    const columns: CsvColumn<Donation>[] = [
-      { header: "Data", value: (row) => formatDateTimeBR(row.date) },
-      { header: "Doador", value: (row) => row.donorName },
-      { header: "Telefone", value: (row) => row.donorPhone ?? "" },
-      { header: "Tipo", value: (row) => donationKindLabel[row.kind] },
-      { header: "Status", value: (row) => donationStatusLabel[row.status] },
-      { header: "Campanha", value: (row) => row.campaign ?? "" },
-      {
-        header: "Valor",
-        value: (row) =>
-          row.amount !== undefined ? row.amount.toFixed(2).replace(".", ",") : "",
-      },
-      {
-        header: "Item",
-        value: (row) => (row.itemType ? donationItemLabel[row.itemType] : ""),
-      },
-      { header: "Quantidade", value: (row) => row.quantity ?? "" },
-      { header: "Descrição", value: (row) => row.description ?? "" },
-    ];
+  function handleExportDonationsCsv() {
     downloadCsv(
-      `doacoes-${new Date().toISOString().slice(0, 10)}.csv`,
-      buildCsv(filteredDonations, columns),
+      `doacoes-${todayStamp()}.csv`,
+      buildCsv(filteredDonations, donationColumns),
+    );
+  }
+
+  function handleExportVolunteerHoursCsv() {
+    downloadCsv(
+      `horas-voluntariado-${todayStamp()}.csv`,
+      buildCsv(filteredVolunteerHours, volunteerHoursColumns),
+    );
+  }
+
+  function handleExportAppointmentsPdf() {
+    downloadPdfReport(
+      `atendimentos-${todayStamp()}.pdf`,
+      {
+        title: "Relatório de Atendimentos",
+        period: range,
+        summary: [
+          { label: "Atendimentos", value: appointmentsSummary.total.toString() },
+          {
+            label: "Pacientes únicas",
+            value: appointmentsSummary.uniquePatients.toString(),
+          },
+          {
+            label: "Encaminhamentos",
+            value: appointmentsSummary.withReferral.toString(),
+          },
+          {
+            label: "Concluídos",
+            value: appointmentsSummary.byStatus.concluido.toString(),
+          },
+        ],
+      },
+      [
+        {
+          title: "Atendimentos",
+          columns: appointmentColumns,
+          rows: filteredAppointments,
+        },
+      ],
+    );
+  }
+
+  function handleExportDonationsPdf() {
+    downloadPdfReport(
+      `doacoes-${todayStamp()}.pdf`,
+      {
+        title: "Relatório de Doações",
+        period: range,
+        summary: [
+          { label: "Doações", value: donationsSummary.total.toString() },
+          {
+            label: "Total arrecadado",
+            value: formatCurrencyBRL(donationsSummary.totalAmount),
+          },
+          {
+            label: "Doadores únicos",
+            value: donationsSummary.uniqueDonors.toString(),
+          },
+          {
+            label: "Financeiras / Materiais",
+            value: `${donationsSummary.byKind.financeira} / ${donationsSummary.byKind.material}`,
+          },
+        ],
+      },
+      [{ title: "Doações", columns: donationColumns, rows: filteredDonations }],
+    );
+  }
+
+  function handleExportVolunteerHoursPdf() {
+    const categoriesSummary = Object.entries(volunteerHoursSummary.byCategory).map(
+      ([category, hours]) => ({
+        label: categoryLabelMap[category] ?? category,
+        value: `${hours.toFixed(1).replace(".", ",")} h`,
+      }),
+    );
+
+    downloadPdfReport(
+      `horas-voluntariado-${todayStamp()}.pdf`,
+      {
+        title: "Relatório de Horas de Voluntariado",
+        period: range,
+        summary: [
+          {
+            label: "Total de horas",
+            value: `${volunteerHoursSummary.totalHours.toFixed(1).replace(".", ",")} h`,
+          },
+          {
+            label: "Registros",
+            value: volunteerHoursSummary.totalEntries.toString(),
+          },
+          {
+            label: "Voluntárias ativas",
+            value: volunteerConsolidation.length.toString(),
+          },
+          {
+            label: "Atividades distintas",
+            value: volunteerHoursSummary.uniqueActivities.toString(),
+          },
+          ...categoriesSummary,
+        ],
+      },
+      [
+        {
+          title: "Consolidado por voluntária",
+          columns: volunteerConsolidationColumns,
+          rows: volunteerConsolidation,
+        },
+        {
+          title: "Horas registradas (detalhe)",
+          columns: volunteerHoursColumns,
+          rows: filteredVolunteerHours,
+        },
+      ],
+    );
+  }
+
+  function handleExportVolunteerConsolidationCsv() {
+    downloadCsv(
+      `horas-por-voluntaria-${todayStamp()}.csv`,
+      buildCsv(volunteerConsolidation, volunteerConsolidationColumns),
     );
   }
 
@@ -293,7 +483,7 @@ export function AdminReports() {
             Totais calculados sobre os filtros aplicados.
           </p>
         </header>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
           <SummaryCard
             label="Atendimentos no período"
             value={appointmentsSummary.total.toString()}
@@ -321,6 +511,13 @@ export function AdminReports() {
             icon={<PiggyBank className="h-5 w-5 text-green-600" />}
             iconBg="bg-green-100"
           />
+          <SummaryCard
+            label="Horas de voluntariado"
+            value={`${volunteerHoursSummary.totalHours.toFixed(1).replace(".", ",")} h`}
+            hint={`${volunteerHoursSummary.totalEntries} registros`}
+            icon={<Clock className="h-5 w-5 text-amber-600" />}
+            iconBg="bg-amber-100"
+          />
         </div>
       </section>
 
@@ -340,15 +537,26 @@ export function AdminReports() {
               </p>
             </div>
           </div>
-          <Button
-            variant="outline"
-            onClick={handleExportAppointments}
-            disabled={filteredAppointments.length === 0}
-            className="rounded-full border-pink-300 text-pink-700 hover:bg-pink-50"
-          >
-            <Download size={14} />
-            Exportar CSV
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={handleExportAppointmentsCsv}
+              disabled={filteredAppointments.length === 0}
+              className="rounded-full border-pink-300 text-pink-700 hover:bg-pink-50"
+            >
+              <Download size={14} />
+              CSV
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleExportAppointmentsPdf}
+              disabled={filteredAppointments.length === 0}
+              className="rounded-full border-pink-300 text-pink-700 hover:bg-pink-50"
+            >
+              <FileDown size={14} />
+              PDF
+            </Button>
+          </div>
         </div>
 
         {filteredAppointments.length === 0 ? (
@@ -428,15 +636,26 @@ export function AdminReports() {
               </p>
             </div>
           </div>
-          <Button
-            variant="outline"
-            onClick={handleExportDonations}
-            disabled={filteredDonations.length === 0}
-            className="rounded-full border-pink-300 text-pink-700 hover:bg-pink-50"
-          >
-            <Download size={14} />
-            Exportar CSV
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={handleExportDonationsCsv}
+              disabled={filteredDonations.length === 0}
+              className="rounded-full border-pink-300 text-pink-700 hover:bg-pink-50"
+            >
+              <Download size={14} />
+              CSV
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleExportDonationsPdf}
+              disabled={filteredDonations.length === 0}
+              className="rounded-full border-pink-300 text-pink-700 hover:bg-pink-50"
+            >
+              <FileDown size={14} />
+              PDF
+            </Button>
+          </div>
         </div>
 
         {filteredDonations.length === 0 ? (
@@ -482,6 +701,188 @@ export function AdminReports() {
                         >
                           {donationStatusLabel[donation.status]}
                         </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-3xl border border-pink-100 bg-white p-6 shadow-sm shadow-pink-100/40">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100">
+              <Clock className="h-5 w-5 text-amber-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-[var(--primary)]">
+                Horas de voluntariado
+              </h2>
+              <p className="text-sm text-[var(--muted-foreground)]">
+                {filteredVolunteerHours.length}{" "}
+                {filteredVolunteerHours.length === 1 ? "registro" : "registros"} ·{" "}
+                {volunteerHoursSummary.totalHours.toFixed(1).replace(".", ",")} h no recorte.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={handleExportVolunteerHoursCsv}
+              disabled={filteredVolunteerHours.length === 0}
+              className="rounded-full border-pink-300 text-pink-700 hover:bg-pink-50"
+            >
+              <Download size={14} />
+              CSV
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleExportVolunteerHoursPdf}
+              disabled={filteredVolunteerHours.length === 0}
+              className="rounded-full border-pink-300 text-pink-700 hover:bg-pink-50"
+            >
+              <FileDown size={14} />
+              PDF
+            </Button>
+          </div>
+        </div>
+
+        {filteredVolunteerHours.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-pink-100 bg-pink-50/40 p-6 text-center text-sm text-[var(--muted-foreground)]">
+            Nenhuma hora de voluntariado encontrada no recorte atual.
+          </p>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-pink-100">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="bg-pink-100 text-slate-800">
+                    <th className="px-3 py-2 font-semibold">Data</th>
+                    <th className="px-3 py-2 font-semibold">Voluntária</th>
+                    <th className="px-3 py-2 font-semibold">Atividade</th>
+                    <th className="px-3 py-2 font-semibold">Categoria</th>
+                    <th className="px-3 py-2 font-semibold">Local</th>
+                    <th className="px-3 py-2 font-semibold text-right">Horas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredVolunteerHours.map((entry) => (
+                    <tr
+                      key={entry.id}
+                      className="border-t border-pink-100 hover:bg-pink-50/60"
+                    >
+                      <td className="px-3 py-2 align-top whitespace-nowrap">
+                        {formatDateBR(entry.date)}
+                      </td>
+                      <td className="px-3 py-2 align-top">{entry.volunteerName}</td>
+                      <td className="px-3 py-2 align-top">{entry.activityName}</td>
+                      <td className="px-3 py-2 align-top">
+                        <Badge
+                          variant="outline"
+                          className="border-amber-200 bg-amber-50 text-amber-800"
+                        >
+                          {categoryLabelMap[entry.category] ?? entry.category}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-2 align-top text-[var(--muted-foreground)]">
+                        {entry.location}
+                      </td>
+                      <td className="px-3 py-2 align-top text-right font-semibold text-amber-700">
+                        {entry.hours.toFixed(1).replace(".", ",")} h
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-3xl border border-pink-100 bg-white p-6 shadow-sm shadow-pink-100/40">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100">
+              <Users className="h-5 w-5 text-amber-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-[var(--primary)]">
+                Consolidado por voluntária
+              </h2>
+              <p className="text-sm text-[var(--muted-foreground)]">
+                {volunteerConsolidation.length}{" "}
+                {volunteerConsolidation.length === 1
+                  ? "voluntária ativa"
+                  : "voluntárias ativas"} no recorte (RN12).
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            onClick={handleExportVolunteerConsolidationCsv}
+            disabled={volunteerConsolidation.length === 0}
+            className="rounded-full border-pink-300 text-pink-700 hover:bg-pink-50"
+          >
+            <Download size={14} />
+            CSV consolidado
+          </Button>
+        </div>
+
+        {volunteerConsolidation.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-pink-100 bg-pink-50/40 p-6 text-center text-sm text-[var(--muted-foreground)]">
+            Nenhuma voluntária com registros no recorte atual.
+          </p>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-pink-100">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="bg-pink-100 text-slate-800">
+                    <th className="px-3 py-2 font-semibold">Voluntária</th>
+                    <th className="px-3 py-2 font-semibold text-right">Total</th>
+                    <th className="px-3 py-2 font-semibold text-right">Registros</th>
+                    <th className="px-3 py-2 font-semibold">Atividades</th>
+                    <th className="px-3 py-2 font-semibold">Período</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {volunteerConsolidation.map((row) => (
+                    <tr
+                      key={row.volunteerName}
+                      className="border-t border-pink-100 hover:bg-pink-50/60"
+                    >
+                      <td className="px-3 py-2 align-top font-semibold">
+                        {row.volunteerName}
+                      </td>
+                      <td className="px-3 py-2 align-top text-right font-semibold text-amber-700 whitespace-nowrap">
+                        {row.totalHours.toFixed(1).replace(".", ",")} h
+                      </td>
+                      <td className="px-3 py-2 align-top text-right text-[var(--muted-foreground)]">
+                        {row.entries}
+                      </td>
+                      <td className="px-3 py-2 align-top text-[var(--muted-foreground)]">
+                        {row.activities.length > 0 ? (
+                          <ul className="list-disc pl-4">
+                            {row.activities.slice(0, 4).map((act) => (
+                              <li key={act}>{act}</li>
+                            ))}
+                            {row.activities.length > 4 && (
+                              <li className="italic">
+                                +{row.activities.length - 4} outras
+                              </li>
+                            )}
+                          </ul>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="px-3 py-2 align-top text-[var(--muted-foreground)] whitespace-nowrap">
+                        {row.periodStart && row.periodEnd
+                          ? `${formatDateBR(row.periodStart)} a ${formatDateBR(row.periodEnd)}`
+                          : "—"}
                       </td>
                     </tr>
                   ))}

@@ -55,7 +55,7 @@ export function Dialog({
         aria-modal="true"
         aria-labelledby="dialog-title"
         className={cn(
-          "relative w-full max-w-2xl rounded-3xl border border-pink-100 bg-white shadow-2xl shadow-pink-200/40",
+          "relative flex max-h-[calc(100vh-3rem)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-pink-100 bg-white shadow-2xl shadow-pink-200/40",
           className,
         )}
         onClick={(event) => event.stopPropagation()}
@@ -64,12 +64,12 @@ export function Dialog({
           type="button"
           onClick={onClose}
           aria-label="Fechar modal"
-          className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full border border-pink-100 bg-white text-[var(--muted-foreground)] transition-colors hover:bg-pink-50 hover:text-[var(--primary)]"
+          className="absolute right-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-pink-100 bg-white text-[var(--muted-foreground)] transition-colors hover:bg-pink-50 hover:text-[var(--primary)]"
         >
           <X size={16} />
         </button>
 
-        <div className="border-b border-pink-100 px-6 py-5 sm:px-8">
+        <div className="shrink-0 border-b border-pink-100 px-6 py-5 sm:px-8">
           <h2
             id="dialog-title"
             className="pr-10 text-xl font-semibold text-[var(--primary)]"
@@ -83,7 +83,9 @@ export function Dialog({
           )}
         </div>
 
-        <div className="px-6 py-6 sm:px-8">{children}</div>
+        <div className="flex-1 overflow-y-auto px-6 py-6 sm:px-8">
+          {children}
+        </div>
       </div>
     </div>
   );

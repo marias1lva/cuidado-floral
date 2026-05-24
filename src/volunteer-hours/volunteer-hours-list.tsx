@@ -1,4 +1,4 @@
-import { CalendarDays, Clock3, MapPin } from "lucide-react";
+import { CalendarDays, Clock3, MapPin, User2 } from "lucide-react";
 
 import { Badge } from "../ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
@@ -77,6 +77,12 @@ export function VolunteerHoursList({ entries }: VolunteerHoursListProps) {
                 <MapPin size={14} className="text-[var(--primary)]" />
                 {entry.location}
               </span>
+              {entry.volunteerName && (
+                <span className="flex items-center gap-1.5">
+                  <User2 size={14} className="text-[var(--primary)]" />
+                  {entry.volunteerName}
+                </span>
+              )}
             </div>
           </article>
         ))}

@@ -3,6 +3,7 @@ import {
   Bell,
   Download,
   Edit,
+  FileDown,
   FileText,
   Heart,
   LogOut,
@@ -26,6 +27,12 @@ import {
   saveManagedUsers,
   type Campaign,
 } from "./domain/admin-data";
+import {
+  buildCsv,
+  downloadCsv,
+  downloadPdfReport,
+  type CsvColumn,
+} from "./domain/reports";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import {
@@ -92,6 +99,38 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
       console.error("Falha ao salvar usuários", error);
     });
   }, [users, hasLoadedUsers]);
+
+  const userExportColumns: CsvColumn<ManagedUser>[] = [
+    { header: "Nome", value: (row) => row.name },
+    { header: "E-mail", value: (row) => row.email },
+    { header: "CPF", value: (row) => row.cpf },
+    { header: "Tipo", value: (row) => formatRoleLabel(row.type) },
+    { header: "Status", value: (row) => row.status },
+    { header: "Data de cadastro", value: (row) => row.date },
+  ];
+
+  function handleExportUsersCsv() {
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadCsv(`usuarios-${stamp}.csv`, buildCsv(users, userExportColumns));
+  }
+
+  function handleExportUsersPdf() {
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadPdfReport(
+      `usuarios-${stamp}.pdf`,
+      {
+        title: "Relatório de Usuários",
+        summary: [
+          { label: "Total", value: users.length.toString() },
+          { label: "Ativos", value: activeUsers.length.toString() },
+          { label: "Pacientes", value: patientsCount.toString() },
+          { label: "Voluntárias", value: volunteersCount.toString() },
+          { label: "Doadores", value: donorsCount.toString() },
+        ],
+      },
+      [{ title: "Usuários", columns: userExportColumns, rows: users }],
+    );
+  }
 
   const activeUsers = users.filter((user) => user.status === "Ativo");
   const patientsCount = activeUsers.filter(
@@ -313,13 +352,24 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
                     Visualize e gerencie todos os usuários do sistema
                   </CardDescription>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"
+                    onClick={handleExportUsersCsv}
+                    disabled={users.length === 0}
                     className="rounded-full border-pink-300 hover:bg-pink-50"
                   >
                     <Download className="mr-2 h-4 w-4" />
-                    Exportar
+                    CSV
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleExportUsersPdf}
+                    disabled={users.length === 0}
+                    className="rounded-full border-pink-300 hover:bg-pink-50"
+                  >
+                    <FileDown className="mr-2 h-4 w-4" />
+                    PDF
                   </Button>
                   <Button
                     onClick={openCreateUserModal}

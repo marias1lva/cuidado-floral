@@ -24,6 +24,17 @@ export type AppointmentStatus =
   | "encaminhado"
   | "cancelado";
 
+export type AppointmentAuthor = "paciente" | "voluntaria";
+
+export interface AppointmentAttachment {
+  id: string;
+  filename: string;
+  mimeType: string;
+  size: number; // bytes
+  url: string; // /uploads/<folder>/<file>
+  uploadedAt: string; // ISO datetime
+}
+
 export type AppointmentReferral =
   | "mastologista"
   | "psicologia"
@@ -33,6 +44,14 @@ export type AppointmentReferral =
   | "outro"
   | null;
 
+export interface Sector {
+  id: string;
+  name: string;
+  // slug bate com AppointmentReferral quando aplicável; fora isso vira "outro"
+  slug: NonNullable<AppointmentReferral>;
+  description?: string;
+}
+
 export interface Appointment {
   id: string;
   patientId: string;
@@ -40,10 +59,13 @@ export interface Appointment {
   date: string; // YYYY-MM-DD
   time?: string; // HH:mm
   volunteerName: string;
+  professionalName?: string; // médico ou clínica externa (atendimento registrado pela paciente)
   status: AppointmentStatus;
   observacoes: string;
   encaminhamento: AppointmentReferral;
   encaminhamentoDetalhe?: string;
+  attachments?: AppointmentAttachment[];
+  createdBy?: AppointmentAuthor;
   createdAt: string; // ISO datetime
   updatedAt: string; // ISO datetime
 }
@@ -79,6 +101,9 @@ export interface Donation {
   description?: string;
   deliveryMethod?: DonationDeliveryMethod;
   notes?: string;
+  // Comprovante rastreável (RF12, RN13) — gerado em doações financeiras
+  protocol?: string;
+  receiptIssuedAt?: string; // ISO datetime
 }
 
 export type NotificationType =

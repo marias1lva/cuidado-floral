@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Bell, Calendar, FileText, Plus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Bell, Calendar, FileText, Paperclip, Plus, Trash2 } from "lucide-react";
 
 import {
   buildAppointmentId,
@@ -7,6 +7,7 @@ import {
   loadNotifications,
   saveAppointments,
   saveNotifications,
+  uploadAttachments,
 } from "../../domain/patient-data";
 import { DEMO_PATIENT_ID, DEMO_PATIENT_NAME } from "../../domain/storage";
 import type { Appointment, AppNotification } from "../../domain/types";
@@ -211,6 +212,12 @@ interface PatientRequestAppointmentModalProps {
   onSave: (appointment: Appointment) => void;
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function PatientRequestAppointmentModal({
   open,
   onClose,
@@ -221,39 +228,96 @@ function PatientRequestAppointmentModal({
   const [consultationType, setConsultationType] = useState(
     "Acolhimento inicial",
   );
+  const [professionalName, setProfessionalName] = useState("");
   const [notes, setNotes] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  function handleClose() {
+  function resetForm() {
     setDate("");
     setTime("");
     setConsultationType("Acolhimento inicial");
+    setProfessionalName("");
     setNotes("");
+    setFiles([]);
+    setError(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function handleClose() {
+    if (submitting) return;
+    resetForm();
     onClose();
   }
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!date || !time) {
+  function handleAddFiles(event: React.ChangeEvent<HTMLInputElement>) {
+    const newFiles = Array.from(event.target.files ?? []);
+    if (newFiles.length === 0) return;
+
+    const allowedExt = ["pdf", "jpg", "jpeg"];
+    const allowedMime = ["application/pdf", "image/jpeg", "image/jpg"];
+    const invalid = newFiles.filter((file) => {
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+      const mimeOk = allowedMime.includes(file.type.toLowerCase());
+      const extOk = allowedExt.includes(ext);
+      return !mimeOk && !extOk;
+    });
+
+    if (invalid.length > 0) {
+      setError(
+        `Formato inválido em ${invalid
+          .map((f) => f.name)
+          .join(", ")}. Envie apenas PDF ou JPG.`,
+      );
+      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
-    onSave({
-      id: buildAppointmentId(),
-      patientId: DEMO_PATIENT_ID,
-      patientName: DEMO_PATIENT_NAME,
-      date,
-      time,
-      volunteerName: "Atendimento Solicitado",
-      status: "agendado",
-      observacoes: `Solicitação de atendimento: ${consultationType}${
-        notes ? ` — ${notes}` : ""
-      }`,
-      encaminhamento: null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
+    setError(null);
+    setFiles((current) => [...current, ...newFiles]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
 
-    handleClose();
+  function handleRemoveFile(index: number) {
+    setFiles((current) => current.filter((_, i) => i !== index));
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!date || !time) return;
+
+    setSubmitting(true);
+    setError(null);
+    try {
+      const attachments = await uploadAttachments(files);
+      const now = new Date().toISOString();
+      onSave({
+        id: buildAppointmentId(),
+        patientId: DEMO_PATIENT_ID,
+        patientName: DEMO_PATIENT_NAME,
+        date,
+        time,
+        volunteerName: "Atendimento solicitado pela paciente",
+        professionalName: professionalName.trim() || undefined,
+        status: "agendado",
+        observacoes: `Solicitação de atendimento: ${consultationType}${
+          notes ? ` — ${notes}` : ""
+        }`,
+        encaminhamento: null,
+        attachments: attachments.length > 0 ? attachments : undefined,
+        createdBy: "paciente",
+        createdAt: now,
+        updatedAt: now,
+      });
+      resetForm();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao enviar.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   if (!open) {
@@ -327,6 +391,19 @@ function PatientRequestAppointmentModal({
 
         <div>
           <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
+            Nome do profissional ou clínica
+          </label>
+          <Input
+            type="text"
+            value={professionalName}
+            onChange={(event) => setProfessionalName(event.target.value)}
+            placeholder="Ex.: Dra. Joana Mello — Clínica Saúde Mais"
+            className="text-sm"
+          />
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
             Observações
           </label>
           <Textarea
@@ -337,12 +414,70 @@ function PatientRequestAppointmentModal({
           />
         </div>
 
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
+            Anexos (diagnósticos, receitas, exames)
+          </label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept=".pdf,.jpg,.jpeg,application/pdf,image/jpeg"
+            onChange={handleAddFiles}
+            className="block w-full text-sm text-[var(--muted-foreground)] file:mr-3 file:rounded-full file:border-0 file:bg-pink-100 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-pink-700 hover:file:bg-pink-200"
+          />
+          {files.length > 0 && (
+            <ul className="mt-3 flex flex-col gap-2">
+              {files.map((file, index) => (
+                <li
+                  key={`${file.name}-${index}`}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-pink-100 bg-pink-50/40 px-3 py-2 text-sm"
+                >
+                  <span className="inline-flex min-w-0 items-center gap-2 truncate">
+                    <Paperclip size={14} className="shrink-0 text-pink-600" />
+                    <span className="truncate">{file.name}</span>
+                    <span className="shrink-0 text-xs text-[var(--muted-foreground)]">
+                      {formatFileSize(file.size)}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveFile(index)}
+                    className="rounded-full p-1 text-red-600 hover:bg-red-50"
+                    aria-label={`Remover ${file.name}`}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+            Apenas PDF ou JPG. Até 10 arquivos, 10 MB cada.
+          </p>
+        </div>
+
+        {error && (
+          <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </p>
+        )}
+
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-          <Button type="button" variant="secondary" onClick={handleClose}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleClose}
+            disabled={submitting}
+          >
             Cancelar
           </Button>
-          <Button type="submit" className="h-11 rounded-full bg-[var(--primary)] text-white hover:bg-[var(--primary)]/90">
-            Solicitar atendimento
+          <Button
+            type="submit"
+            disabled={submitting}
+            className="h-11 rounded-full bg-[var(--primary)] text-white hover:bg-[var(--primary)]/90 disabled:opacity-60"
+          >
+            {submitting ? "Enviando..." : "Solicitar atendimento"}
           </Button>
         </div>
       </form>
