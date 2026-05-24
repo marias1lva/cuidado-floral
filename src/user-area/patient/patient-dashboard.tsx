@@ -9,8 +9,14 @@ import {
   saveNotifications,
   uploadAttachments,
 } from "../../domain/patient-data";
-import { DEMO_PATIENT_ID, DEMO_PATIENT_NAME } from "../../domain/storage";
+import { loadUser, saveUser } from "../../domain/admin-data";
+import {
+  DEMO_PATIENT_ID,
+  DEMO_PATIENT_NAME,
+  DEMO_PATIENT_USER_ID,
+} from "../../domain/storage";
 import type { Appointment, AppNotification } from "../../domain/types";
+import type { ManagedUser } from "../../admin/types";
 import { PatientNotifications } from "./patient-notifications";
 import { PatientAppointmentsTimeline } from "./patient-appointments-timeline";
 import { formatDateBR } from "./patient-utils";
@@ -20,10 +26,34 @@ import { Dialog } from "../../ui/dialog";
 import { Input } from "../../ui/input";
 import { Textarea } from "../../ui/textarea";
 
-export function PatientDashboard() {
+function normalizeProfileDate(value: string) {
+  if (!value) {
+    return "";
+  }
+
+  if (value.includes("/")) {
+    const [day, month, year] = value.split("/");
+    if (day && month && year) {
+      return `${year.padStart(4, "0")}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    }
+  }
+
+  return value;
+}
+
+interface PatientDashboardProps {
+  onPatientNameChange?: (name: string) => void;
+}
+
+export function PatientDashboard({
+  onPatientNameChange,
+}: PatientDashboardProps) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [patientUser, setPatientUser] = useState<ManagedUser | null>(null);
+  const [patientName, setPatientName] = useState(DEMO_PATIENT_NAME);
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [hasLoadedAppointments, setHasLoadedAppointments] = useState(false);
   const [hasLoadedNotifications, setHasLoadedNotifications] = useState(false);
 
@@ -40,6 +70,24 @@ export function PatientDashboard() {
       })
       .catch((error) => {
         console.error("Falha ao carregar dados da paciente", error);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    void loadUser(DEMO_PATIENT_USER_ID)
+      .then((loadedUser) => {
+        if (!isMounted) return;
+        setPatientUser(loadedUser);
+        setPatientName(loadedUser.name);
+      })
+      .catch((error) => {
+        console.error("Falha ao carregar perfil da paciente", error);
       });
 
     return () => {
@@ -76,8 +124,37 @@ export function PatientDashboard() {
     });
   }, [appointments, hasLoadedAppointments]);
 
-  function handleSaveAppointment(appointment: Appointment) {
-    setAppointments((current) => [appointment, ...current]);
+  async function handleSaveAppointment(appointment: Appointment) {
+    const nextAppointments = [appointment, ...appointments];
+    setAppointments(nextAppointments);
+
+    try {
+      await saveAppointments(nextAppointments);
+    } catch (error) {
+      console.error("Falha ao salvar atendimento", error);
+    }
+  }
+
+  async function handleSaveProfile(updatedUser: ManagedUser) {
+    setPatientUser(updatedUser);
+    setPatientName(updatedUser.name);
+
+    setAppointments((current) =>
+      current.map((appointment) =>
+        appointment.patientId === DEMO_PATIENT_ID
+          ? { ...appointment, patientName: updatedUser.name }
+          : appointment,
+      ),
+    );
+
+    try {
+      await saveUser(updatedUser);
+      if (onPatientNameChange) {
+        onPatientNameChange(updatedUser.name);
+      }
+    } catch (error) {
+      console.error("Falha ao salvar cadastro da paciente", error);
+    }
   }
 
   const completedCount = useMemo(
@@ -121,7 +198,10 @@ export function PatientDashboard() {
             <p className="mb-5 max-w-[260px] text-sm leading-relaxed text-[var(--muted-foreground)]">
               Atualize suas informações pessoais e histórico médico
             </p>
-            <Button className="h-11 w-full rounded-full bg-[var(--primary)] font-semibold text-white hover:bg-[var(--primary)]/90">
+            <Button
+              className="h-11 w-full rounded-full bg-[var(--primary)] font-semibold text-white hover:bg-[var(--primary)]/90"
+              onClick={() => setIsProfileModalOpen(true)}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Atualizar Dados
             </Button>
@@ -197,10 +277,17 @@ export function PatientDashboard() {
           onMarkAllAsRead={handleMarkAllAsRead}
         />
       </div>
+      <PatientProfileModal
+        open={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        patientUser={patientUser}
+        onSave={handleSaveProfile}
+      />
       <PatientRequestAppointmentModal
         open={isRequestModalOpen}
         onClose={() => setIsRequestModalOpen(false)}
         onSave={handleSaveAppointment}
+        patientName={patientName}
       />
     </div>
   );
@@ -210,6 +297,7 @@ interface PatientRequestAppointmentModalProps {
   open: boolean;
   onClose: () => void;
   onSave: (appointment: Appointment) => void;
+  patientName: string;
 }
 
 function formatFileSize(bytes: number): string {
@@ -222,6 +310,7 @@ function PatientRequestAppointmentModal({
   open,
   onClose,
   onSave,
+  patientName,
 }: PatientRequestAppointmentModalProps) {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
@@ -338,7 +427,7 @@ function PatientRequestAppointmentModal({
           </label>
           <Input
             type="text"
-            value={DEMO_PATIENT_NAME}
+            value={patientName}
             disabled
             className="bg-[#F8F1F5] text-sm"
           />
@@ -489,6 +578,105 @@ interface DashboardCardProps {
   icon: React.ReactNode;
   title: string;
   children: React.ReactNode;
+}
+
+interface PatientProfileModalProps {
+  open: boolean;
+  onClose: () => void;
+  patientUser: ManagedUser | null;
+  onSave: (user: ManagedUser) => void;
+}
+
+function PatientProfileModal({
+  open,
+  onClose,
+  patientUser,
+  onSave,
+}: PatientProfileModalProps) {
+  const [name, setName] = useState("");
+  const [birthDate, setBirthDate] = useState("");
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    if (patientUser) {
+      setName(patientUser.name);
+      setBirthDate(normalizeProfileDate(patientUser.date));
+    } else {
+      setName("");
+      setBirthDate("");
+    }
+  }, [open, patientUser]);
+
+  function handleClose() {
+    onClose();
+    setName(patientUser?.name ?? "");
+    setBirthDate(normalizeProfileDate(patientUser?.date ?? ""));
+  }
+
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!patientUser) {
+      return;
+    }
+
+    onSave({
+      ...patientUser,
+      name: name.trim(),
+      date: birthDate,
+    });
+    handleClose();
+  }
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      title="Atualizar cadastro"
+      description="Altere seu nome e data de nascimento."
+    >
+      <form className="space-y-5" onSubmit={handleSubmit}>
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
+            Nome completo
+          </label>
+          <Input
+            type="text"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            required
+            className="text-sm"
+          />
+        </div>
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
+            Data de nascimento
+          </label>
+          <Input
+            type="date"
+            value={birthDate}
+            onChange={(event) => setBirthDate(event.target.value)}
+            required
+            className="text-sm"
+          />
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+          <Button type="button" variant="secondary" onClick={handleClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" className="h-11 rounded-full bg-[var(--primary)] text-white hover:bg-[var(--primary)]/90">
+            Salvar alterações
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
 }
 
 function DashboardCard({

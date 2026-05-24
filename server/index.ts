@@ -3,7 +3,11 @@ import { resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { createWriteStream } from "node:fs";
 import Fastify from "fastify";
-import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
+import type {
+  FastifyReply,
+  FastifyRequest,
+  preHandlerHookHandler,
+} from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
@@ -140,7 +144,12 @@ app.post<{ Body: { email?: string; password?: string } }>(
 
 // ── Protegidas ─────────────────────────────────────────
 
-const ALL_ROLES: ManagedUserRole[] = ["admin", "voluntaria", "paciente", "doador"];
+const ALL_ROLES: ManagedUserRole[] = [
+  "admin",
+  "voluntaria",
+  "paciente",
+  "doador",
+];
 
 app.get(
   "/api/patients",
@@ -222,14 +231,10 @@ app.put<{ Body: Donation[] }>(
   },
 );
 
-app.get(
-  "/api/users",
-  { preHandler: requireRole(["admin"]) },
-  async () => {
-    const store = await readStore();
-    return toManagedUsers(store.users);
-  },
-);
+app.get("/api/users", { preHandler: requireRole(["admin"]) }, async () => {
+  const store = await readStore();
+  return toManagedUsers(store.users);
+});
 
 app.put<{ Body: ManagedUser[] }>(
   "/api/users",
@@ -249,23 +254,15 @@ app.put<{ Body: ManagedUser[] }>(
   },
 );
 
-app.get(
-  "/api/campaigns",
-  { preHandler: requireRole(ALL_ROLES) },
-  async () => {
-    const store = await readStore();
-    return store.campaigns;
-  },
-);
+app.get("/api/campaigns", { preHandler: requireRole(ALL_ROLES) }, async () => {
+  const store = await readStore();
+  return store.campaigns;
+});
 
-app.get(
-  "/api/sectors",
-  { preHandler: requireRole(ALL_ROLES) },
-  async () => {
-    const store = await readStore();
-    return store.sectors;
-  },
-);
+app.get("/api/sectors", { preHandler: requireRole(ALL_ROLES) }, async () => {
+  const store = await readStore();
+  return store.sectors;
+});
 
 app.get(
   "/api/volunteer-hours",
