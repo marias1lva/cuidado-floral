@@ -15,10 +15,21 @@ export function loadManagedUsers(): Promise<ManagedUser[]> {
   return apiRequest<ManagedUser[]>("/users");
 }
 
+export function loadUser(userId: number): Promise<ManagedUser> {
+  return apiRequest<ManagedUser>(`/users/${userId}`);
+}
+
 export function saveManagedUsers(items: ManagedUser[]): Promise<ManagedUser[]> {
   return apiRequest<ManagedUser[]>("/users", {
     method: "PUT",
     body: JSON.stringify(items),
+  });
+}
+
+export function saveUser(item: ManagedUser): Promise<ManagedUser> {
+  return apiRequest<ManagedUser>(`/users/${item.id}`, {
+    method: "PUT",
+    body: JSON.stringify(item),
   });
 }
 
