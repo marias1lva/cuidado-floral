@@ -65,6 +65,13 @@ app.put<{ Body: Appointment[] }>("/api/appointments", async (request) => {
   return store.appointments;
 });
 
+app.post<{ Body: Appointment }>("/api/appointments", async (request) => {
+  const store = await readStore();
+  store.appointments = [request.body, ...store.appointments];
+  await writeStore(store);
+  return request.body;
+});
+
 app.get("/api/notifications", async () => {
   const store = await readStore();
   return store.notifications;
@@ -93,6 +100,36 @@ app.get("/api/users", async () => {
   const store = await readStore();
   return toManagedUsers(store.users);
 });
+
+app.get<{ Params: { id: string } }>("/api/users/:id", async (request, reply) => {
+  const store = await readStore();
+  const id = Number(request.params.id);
+  const user = store.users.find((item) => item.id === id);
+  if (!user) {
+    return reply.status(404).send({ message: "Usuário não encontrado." });
+  }
+  return toManagedUsers([user])[0];
+});
+
+app.put<{ Params: { id: string }; Body: ManagedUser }>(
+  "/api/users/:id",
+  async (request, reply) => {
+    const store = await readStore();
+    const id = Number(request.params.id);
+    const userIndex = store.users.findIndex((item) => item.id === id);
+    if (userIndex === -1) {
+      return reply.status(404).send({ message: "Usuário não encontrado." });
+    }
+
+    store.users[userIndex] = {
+      ...request.body,
+      password: store.users[userIndex].password,
+    };
+
+    await writeStore(store);
+    return toManagedUsers([store.users[userIndex]])[0];
+  },
+);
 
 app.put<{ Body: ManagedUser[] }>("/api/users", async (request) => {
   const store = await readStore();

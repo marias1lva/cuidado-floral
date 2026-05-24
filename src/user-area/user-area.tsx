@@ -15,15 +15,9 @@ interface UserAreaProps {
 }
 
 const roleContent: Record<
-  UserAreaRole,
+  Exclude<UserAreaRole, "paciente">,
   { title: string; subtitle: string; userName: string }
 > = {
-  paciente: {
-    title: "Minha Área",
-    subtitle:
-      "Bem-vinda de volta! Aqui você pode acompanhar seus atendimentos e atualizar seus dados.",
-    userName: DEMO_PATIENT_NAME,
-  },
   doador: {
     title: "Histórico de Doações",
     subtitle: "Acompanhe suas contribuições e faça novas doações",
@@ -31,8 +25,18 @@ const roleContent: Record<
   },
 };
 
+const patientRoleContent = {
+  title: "Minha Área",
+  subtitle:
+    "Bem-vinda de volta! Aqui você pode acompanhar seus atendimentos e atualizar seus dados.",
+};
+
 export function UserArea({ role, onLogout }: UserAreaProps) {
-  const content = roleContent[role];
+  const [patientName, setPatientName] = useState(DEMO_PATIENT_NAME);
+  const content =
+    role === "paciente"
+      ? { ...patientRoleContent, userName: patientName }
+      : roleContent[role];
   const [isDonationModalOpen, setIsDonationModalOpen] = useState(false);
   const [donations, setDonations] = useState<Donation[]>([]);
   const [hasLoadedDonations, setHasLoadedDonations] = useState(false);
@@ -130,7 +134,7 @@ export function UserArea({ role, onLogout }: UserAreaProps) {
         </div>
 
         {role === "paciente" ? (
-          <PatientDashboard />
+          <PatientDashboard onPatientNameChange={setPatientName} />
         ) : (
           <DonorDashboard
             donations={donorDonations}
