@@ -51,7 +51,6 @@ export function PatientDashboard({
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [patientUser, setPatientUser] = useState<ManagedUser | null>(null);
   const [patientName, setPatientName] = useState(DEMO_PATIENT_NAME);
-  const [patientBirthDate, setPatientBirthDate] = useState("");
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [hasLoadedAppointments, setHasLoadedAppointments] = useState(false);
@@ -85,7 +84,6 @@ export function PatientDashboard({
         if (!isMounted) return;
         setPatientUser(loadedUser);
         setPatientName(loadedUser.name);
-        setPatientBirthDate(normalizeProfileDate(loadedUser.date));
       })
       .catch((error) => {
         console.error("Falha ao carregar perfil da paciente", error);
@@ -139,7 +137,6 @@ export function PatientDashboard({
   async function handleSaveProfile(updatedUser: ManagedUser) {
     setPatientUser(updatedUser);
     setPatientName(updatedUser.name);
-    setPatientBirthDate(normalizeProfileDate(updatedUser.date));
 
     setAppointments((current) =>
       current.map((appointment) =>
