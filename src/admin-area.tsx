@@ -5,6 +5,7 @@ import {
   Edit,
   FileDown,
   FileText,
+  HandHeart,
   Heart,
   LogOut,
   Mail,
@@ -20,6 +21,7 @@ import {
 
 import { AdminUserModal } from "./admin/admin-user-modal";
 import { AdminReports } from "./admin/admin-reports";
+import { AdminDonations } from "./admin/admin-donations";
 import type { ManagedUser, ManagedUserRole } from "./admin/types";
 import {
   loadCampaigns,
@@ -43,7 +45,7 @@ import {
   CardTitle,
 } from "./ui/card";
 
-type AdminTab = "users" | "campaigns" | "reports";
+type AdminTab = "users" | "campaigns" | "donations" | "reports";
 
 function getTodayDateLabel() {
   return new Intl.DateTimeFormat("pt-BR").format(new Date());
@@ -238,7 +240,7 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
             Painel Administrativo
           </h1>
           <p className="text-muted-foreground">
-            Gerencie usuários, campanhas e visualize relatórios do sistema
+            Gerencie usuários, doações, campanhas e visualize relatórios do sistema
           </p>
         </div>
 
@@ -322,11 +324,17 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
           </Card>
         </div>
 
-        <div className="mb-6 grid w-full grid-cols-3 rounded-full bg-pink-100 p-1 shadow-sm">
+        {/* Tabs — agora com 4 opções */}
+        <div className="mb-6 grid w-full grid-cols-4 rounded-full bg-pink-100 p-1 shadow-sm">
           <TabButton
             isActive={activeTab === "users"}
             label="Usuários"
             onClick={() => setActiveTab("users")}
+          />
+          <TabButton
+            isActive={activeTab === "donations"}
+            label="Doações"
+            onClick={() => setActiveTab("donations")}
           />
           <TabButton
             isActive={activeTab === "campaigns"}
@@ -468,6 +476,8 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
             </CardContent>
           </Card>
         )}
+
+        {activeTab === "donations" && <AdminDonations />}
 
         {activeTab === "campaigns" && (
           <Card className="border-pink-100">
