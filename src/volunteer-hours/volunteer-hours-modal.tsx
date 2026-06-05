@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { Button } from "../ui/button";
+import { DatePicker } from "../ui/date-time-picker";
 import { Dialog } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
@@ -172,11 +173,10 @@ export function VolunteerHoursModal({
           </FormField>
 
           <FormField label="Data" error={errors.date}>
-            <Input
-              type="date"
+            <DatePicker
               value={form.date}
               max={maxDate}
-              onChange={(event) => setField("date", event.target.value)}
+              onChange={(value) => setField("date", value)}
               aria-invalid={Boolean(errors.date)}
               className="rounded-2xl border-pink-200 bg-[var(--input-background)]"
             />

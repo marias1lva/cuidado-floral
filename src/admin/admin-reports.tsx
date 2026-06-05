@@ -22,7 +22,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../ui/card";
-import { Input } from "../ui/input";
+import { DatePicker } from "../ui/date-time-picker";
 import {
   Select,
   SelectContent,
@@ -392,26 +392,24 @@ export function AdminReports() {
         <CardContent>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
             <FilterField label="De">
-              <Input
-                type="date"
+              <DatePicker
                 value={range.from ?? ""}
-                onChange={(event) =>
+                onChange={(value) =>
                   setRange((current) => ({
                     ...current,
-                    from: event.target.value || undefined,
+                    from: value || undefined,
                   }))
                 }
                 className="rounded-xl border-pink-200 bg-[var(--input-background)]"
               />
             </FilterField>
             <FilterField label="Até">
-              <Input
-                type="date"
+              <DatePicker
                 value={range.to ?? ""}
-                onChange={(event) =>
+                onChange={(value) =>
                   setRange((current) => ({
                     ...current,
-                    to: event.target.value || undefined,
+                    to: value || undefined,
                   }))
                 }
                 className="rounded-xl border-pink-200 bg-[var(--input-background)]"
@@ -565,7 +563,7 @@ export function AdminReports() {
           </p>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-pink-100">
-            <div className="overflow-x-auto">
+            <div className="pretty-scrollbar overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="bg-pink-100 text-slate-800">
@@ -664,7 +662,7 @@ export function AdminReports() {
           </p>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-pink-100">
-            <div className="overflow-x-auto">
+            <div className="pretty-scrollbar overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="bg-pink-100 text-slate-800">
@@ -756,7 +754,7 @@ export function AdminReports() {
           </p>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-pink-100">
-            <div className="overflow-x-auto">
+            <div className="pretty-scrollbar overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="bg-pink-100 text-slate-800">
@@ -837,7 +835,7 @@ export function AdminReports() {
           </p>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-pink-100">
-            <div className="overflow-x-auto">
+            <div className="pretty-scrollbar overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="bg-pink-100 text-slate-800">

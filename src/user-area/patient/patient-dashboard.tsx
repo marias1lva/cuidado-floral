@@ -22,6 +22,7 @@ import { PatientAppointmentsTimeline } from "./patient-appointments-timeline";
 import { formatDateBR } from "./patient-utils";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
+import { DatePicker, TimePicker } from "../../ui/date-time-picker";
 import { Dialog } from "../../ui/dialog";
 import { Input } from "../../ui/input";
 import {
@@ -445,10 +446,9 @@ function PatientRequestAppointmentModal({
             <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
               Data
             </label>
-            <Input
-              type="date"
+            <DatePicker
               value={date}
-              onChange={(event) => setDate(event.target.value)}
+              onChange={setDate}
               required
               className="text-sm"
             />
@@ -457,10 +457,9 @@ function PatientRequestAppointmentModal({
             <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
               Horário
             </label>
-            <Input
-              type="time"
+            <TimePicker
               value={time}
-              onChange={(event) => setTime(event.target.value)}
+              onChange={setTime}
               required
               className="text-sm"
             />
@@ -671,10 +670,9 @@ function PatientProfileModal({
           <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
             Data de nascimento
           </label>
-          <Input
-            type="date"
+          <DatePicker
             value={birthDate}
-            onChange={(event) => setBirthDate(event.target.value)}
+            onChange={setBirthDate}
             required
             className="text-sm"
           />
