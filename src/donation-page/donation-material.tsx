@@ -2,6 +2,13 @@ import { useState } from "react";
 import { ChevronLeft } from "lucide-react";
 import type { MaterialDonationForm, DeliveryMethod, ItemType } from "./donation-types";
 import { formatPhoneBR } from "./phone-format";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 
 const ITEM_TYPES: { value: ItemType; label: string }[] = [
   { value: "roupas", label: "Roupas" },
@@ -110,20 +117,23 @@ export function MaterialDonation({ onBack, onConfirm }: MaterialDonationProps) {
 
         <div>
           <label className="mb-1 block text-xs font-medium text-gray-600">Tipo de item *</label>
-          <select
+          <Select
             value={form.tipoItem}
-            onChange={(e) => handleChange("tipoItem", e.target.value)}
-            className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-pink-400 focus:ring-2 focus:ring-pink-100 bg-white ${
-              errors.tipoItem ? "border-red-400 bg-red-50" : "border-gray-200"
-            }`}
+            onValueChange={(value) => handleChange("tipoItem", value)}
           >
-            <option value="">Selecione...</option>
-            {ITEM_TYPES.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger
+              className={errors.tipoItem ? "border-red-400 bg-red-50" : ""}
+            >
+              <SelectValue placeholder="Selecione..." />
+            </SelectTrigger>
+            <SelectContent>
+              {ITEM_TYPES.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {errors.tipoItem && <p className="mt-1 text-xs text-red-500">{errors.tipoItem}</p>}
         </div>
 

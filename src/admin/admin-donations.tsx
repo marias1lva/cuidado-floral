@@ -22,10 +22,16 @@ import {
   CardTitle,
 } from "../ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
+import {
   deliveryMethodLabel,
   donationItemLabel,
   donationKindLabel,
-  donationStatusLabel,
   formatCurrencyBRL,
   formatDateTimeBR,
 } from "../user-area/donor/donor-utils";
@@ -521,16 +527,20 @@ interface FilterSelectProps {
 
 function FilterSelect({ value, onChange, options }: FilterSelectProps) {
   return (
-    <select
+    <Select
       value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="rounded-full border border-pink-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 outline-none transition-colors hover:border-pink-400 focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
+      onValueChange={onChange}
     >
-      {options.map((opt) => (
-        <option key={opt.value} value={opt.value}>
-          {opt.label}
-        </option>
-      ))}
-    </select>
+      <SelectTrigger size="sm" className="w-36 text-xs font-medium">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((opt) => (
+          <SelectItem key={opt.value} value={opt.value} className="text-xs">
+            {opt.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

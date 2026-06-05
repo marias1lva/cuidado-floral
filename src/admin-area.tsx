@@ -5,7 +5,6 @@ import {
   Edit,
   FileDown,
   FileText,
-  HandHeart,
   Heart,
   LogOut,
   Mail,
