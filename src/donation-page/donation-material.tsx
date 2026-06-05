@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { ChevronLeft } from "lucide-react";
-import type { MaterialDonationForm, DeliveryMethod, ItemType } from "./donation-types";
+import type {
+  MaterialDonationForm,
+  DeliveryMethod,
+  ItemType,
+} from "./donation-types";
 import { formatPhoneBR } from "./phone-format";
+import { Checkbox } from "../ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -33,8 +38,11 @@ export function MaterialDonation({ onBack, onConfirm }: MaterialDonationProps) {
     descricao: "",
     formaEntrega: "",
     observacoes: "",
+    isThirdParty: false,
   });
-  const [errors, setErrors] = useState<Partial<Record<keyof MaterialDonationForm, string>>>({});
+  const [errors, setErrors] = useState<
+    Partial<Record<keyof MaterialDonationForm, string>>
+  >({});
 
   function handleChange(field: keyof MaterialDonationForm, value: string) {
     const next = field === "telefone" ? formatPhoneBR(value) : value;
@@ -42,15 +50,19 @@ export function MaterialDonation({ onBack, onConfirm }: MaterialDonationProps) {
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: "" }));
   }
 
+  function handleThirdPartyChange(checked: boolean) {
+    setForm((prev) => ({ ...prev, isThirdParty: checked }));
+  }
+
   function validate(): boolean {
-    const required: (keyof MaterialDonationForm)[] = [
+    const required = [
       "nome",
       "telefone",
       "tipoItem",
       "quantidade",
       "descricao",
       "formaEntrega",
-    ];
+    ] as const;
     const newErrors: Partial<Record<keyof MaterialDonationForm, string>> = {};
     required.forEach((field) => {
       if (!form[field].trim()) newErrors[field] = "Campo obrigatório";
@@ -78,7 +90,9 @@ export function MaterialDonation({ onBack, onConfirm }: MaterialDonationProps) {
       </div>
 
       <div>
-        <h2 className="text-xl font-semibold text-[var(--primary)]">Doação de Material</h2>
+        <h2 className="text-xl font-semibold text-[var(--primary)]">
+          Doação de Material
+        </h2>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
           Preencha os dados da sua doação e entraremos em contato.
         </p>
@@ -86,37 +100,68 @@ export function MaterialDonation({ onBack, onConfirm }: MaterialDonationProps) {
 
       <div className="space-y-3">
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">Nome *</label>
+          <label className="mb-1 block text-xs font-medium text-gray-600">
+            {form.isThirdParty ? "Nome do terceiro *" : "Nome *"}
+          </label>
           <input
             type="text"
             value={form.nome}
             onChange={(e) => handleChange("nome", e.target.value)}
-            placeholder="Seu nome completo"
+            placeholder={
+              form.isThirdParty
+                ? "Nome completo do terceiro"
+                : "Seu nome completo"
+            }
             className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-pink-400 focus:ring-2 focus:ring-pink-100 ${
-              errors.nome ? "border-red-400 bg-red-50" : "border-gray-200 bg-white"
+              errors.nome
+                ? "border-red-400 bg-red-50"
+                : "border-gray-200 bg-white"
             }`}
           />
-          {errors.nome && <p className="mt-1 text-xs text-red-500">{errors.nome}</p>}
+          {errors.nome && (
+            <p className="mt-1 text-xs text-red-500">{errors.nome}</p>
+          )}
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">Telefone *</label>
+          <label className="mb-1 block text-xs font-medium text-gray-600">
+            {form.isThirdParty ? "Telefone do terceiro *" : "Telefone *"}
+          </label>
           <input
             type="tel"
             inputMode="tel"
             value={form.telefone}
             onChange={(e) => handleChange("telefone", e.target.value)}
-            placeholder="(47) 99999-9999"
+            placeholder={
+              form.isThirdParty ? "Telefone do terceiro" : "(47) 99999-9999"
+            }
             maxLength={15}
             className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-pink-400 focus:ring-2 focus:ring-pink-100 ${
-              errors.telefone ? "border-red-400 bg-red-50" : "border-gray-200 bg-white"
+              errors.telefone
+                ? "border-red-400 bg-red-50"
+                : "border-gray-200 bg-white"
             }`}
           />
-          {errors.telefone && <p className="mt-1 text-xs text-red-500">{errors.telefone}</p>}
+          {errors.telefone && (
+            <p className="mt-1 text-xs text-red-500">{errors.telefone}</p>
+          )}
         </div>
 
+        <label className="flex items-start gap-3 rounded-xl border border-pink-100 bg-pink-50/50 px-3.5 py-3 text-sm text-gray-700">
+          <Checkbox
+            checked={form.isThirdParty}
+            onChange={(event) => handleThirdPartyChange(event.target.checked)}
+            className="mt-0.5"
+          />
+          <span className="leading-relaxed">
+            Esta doação foi realizada por um terceiro usando este perfil.
+          </span>
+        </label>
+
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">Tipo de item *</label>
+          <label className="mb-1 block text-xs font-medium text-gray-600">
+            Tipo de item *
+          </label>
           <Select
             value={form.tipoItem}
             onValueChange={(value) => handleChange("tipoItem", value)}
@@ -134,35 +179,49 @@ export function MaterialDonation({ onBack, onConfirm }: MaterialDonationProps) {
               ))}
             </SelectContent>
           </Select>
-          {errors.tipoItem && <p className="mt-1 text-xs text-red-500">{errors.tipoItem}</p>}
+          {errors.tipoItem && (
+            <p className="mt-1 text-xs text-red-500">{errors.tipoItem}</p>
+          )}
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">Quantidade *</label>
+          <label className="mb-1 block text-xs font-medium text-gray-600">
+            Quantidade *
+          </label>
           <input
             type="text"
             value={form.quantidade}
             onChange={(e) => handleChange("quantidade", e.target.value)}
             placeholder="Ex: 3 peças, 1 kg..."
             className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-pink-400 focus:ring-2 focus:ring-pink-100 ${
-              errors.quantidade ? "border-red-400 bg-red-50" : "border-gray-200 bg-white"
+              errors.quantidade
+                ? "border-red-400 bg-red-50"
+                : "border-gray-200 bg-white"
             }`}
           />
-          {errors.quantidade && <p className="mt-1 text-xs text-red-500">{errors.quantidade}</p>}
+          {errors.quantidade && (
+            <p className="mt-1 text-xs text-red-500">{errors.quantidade}</p>
+          )}
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">Descrição *</label>
+          <label className="mb-1 block text-xs font-medium text-gray-600">
+            Descrição *
+          </label>
           <textarea
             value={form.descricao}
             onChange={(e) => handleChange("descricao", e.target.value)}
             placeholder="Descreva brevemente os itens a serem doados..."
             rows={3}
             className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-pink-400 focus:ring-2 focus:ring-pink-100 resize-none ${
-              errors.descricao ? "border-red-400 bg-red-50" : "border-gray-200 bg-white"
+              errors.descricao
+                ? "border-red-400 bg-red-50"
+                : "border-gray-200 bg-white"
             }`}
           />
-          {errors.descricao && <p className="mt-1 text-xs text-red-500">{errors.descricao}</p>}
+          {errors.descricao && (
+            <p className="mt-1 text-xs text-red-500">{errors.descricao}</p>
+          )}
         </div>
 
         <div>

@@ -89,6 +89,11 @@ export interface Donation {
   donorId: string;
   donorName: string;
   donorPhone?: string;
+  donorSource?: "titular" | "terceiro";
+  profileOwnerId?: string;
+  profileOwnerName?: string;
+  thirdPartyName?: string;
+  thirdPartyPhone?: string;
   kind: DonationKind;
   date: string; // ISO datetime
   status: DonationStatus;

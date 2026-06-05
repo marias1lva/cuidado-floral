@@ -3,6 +3,7 @@ import { Copy, Check, MessageCircle, ChevronLeft } from "lucide-react";
 import type { FinancialDonationForm } from "./donation-types";
 import { formatPhoneBR } from "./phone-format";
 import { CurrencyInput } from "../ui/currency-input";
+import { Checkbox } from "../ui/checkbox";
 
 //substituir por dados reais
 const PIX_KEY = "ong@redefeminina.org.br";
@@ -23,13 +24,20 @@ export function FinancialDonation({
     nome: "",
     telefone: "",
     valorEstimado: "",
+    isThirdParty: false,
   });
-  const [errors, setErrors] = useState<Partial<FinancialDonationForm>>({});
+  const [errors, setErrors] = useState<
+    Partial<Record<keyof FinancialDonationForm, string>>
+  >({});
 
   function handleChange(field: keyof FinancialDonationForm, value: string) {
     const next = field === "telefone" ? formatPhoneBR(value) : value;
     setForm((prev) => ({ ...prev, [field]: next }));
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: "" }));
+  }
+
+  function handleThirdPartyChange(checked: boolean) {
+    setForm((prev) => ({ ...prev, isThirdParty: checked }));
   }
 
   function handleCopyPix() {
@@ -40,7 +48,7 @@ export function FinancialDonation({
   }
 
   function validate(): boolean {
-    const newErrors: Partial<FinancialDonationForm> = {};
+    const newErrors: Partial<Record<keyof FinancialDonationForm, string>> = {};
     if (!form.nome.trim()) newErrors.nome = "Nome é obrigatório";
     if (!form.telefone.trim()) newErrors.telefone = "Telefone é obrigatório";
     setErrors(newErrors);
@@ -131,18 +139,24 @@ export function FinancialDonation({
       {/* Mini formulário */}
       <div className="space-y-3">
         <p className="text-sm font-medium text-gray-700">
-          Seus dados (para confirmarmos a doação)
+          {form.isThirdParty
+            ? "Dados da pessoa terceira (para confirmarmos a doação)"
+            : "Seus dados (para confirmarmos a doação)"}
         </p>
 
         <div>
           <label className="mb-1 block text-xs font-medium text-gray-600">
-            Nome *
+            {form.isThirdParty ? "Nome do terceiro *" : "Nome *"}
           </label>
           <input
             type="text"
             value={form.nome}
             onChange={(e) => handleChange("nome", e.target.value)}
-            placeholder="Seu nome completo"
+            placeholder={
+              form.isThirdParty
+                ? "Nome completo do terceiro"
+                : "Seu nome completo"
+            }
             className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-pink-400 focus:ring-2 focus:ring-pink-100 ${
               errors.nome
                 ? "border-red-400 bg-red-50"
@@ -156,14 +170,16 @@ export function FinancialDonation({
 
         <div>
           <label className="mb-1 block text-xs font-medium text-gray-600">
-            Telefone *
+            {form.isThirdParty ? "Telefone do terceiro *" : "Telefone *"}
           </label>
           <input
             type="tel"
             inputMode="tel"
             value={form.telefone}
             onChange={(e) => handleChange("telefone", e.target.value)}
-            placeholder="(47) 99999-9999"
+            placeholder={
+              form.isThirdParty ? "Telefone do terceiro" : "(47) 99999-9999"
+            }
             maxLength={15}
             className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-pink-400 focus:ring-2 focus:ring-pink-100 ${
               errors.telefone
@@ -175,6 +191,17 @@ export function FinancialDonation({
             <p className="mt-1 text-xs text-red-500">{errors.telefone}</p>
           )}
         </div>
+
+        <label className="flex items-start gap-3 rounded-xl border border-pink-100 bg-pink-50/50 px-3.5 py-3 text-sm text-gray-700">
+          <Checkbox
+            checked={form.isThirdParty}
+            onChange={(event) => handleThirdPartyChange(event.target.checked)}
+            className="mt-0.5"
+          />
+          <span className="leading-relaxed">
+            Esta doação foi realizada por um terceiro usando este perfil.
+          </span>
+        </label>
 
         <div>
           <label className="mb-1 block text-xs font-medium text-gray-600">

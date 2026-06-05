@@ -16,6 +16,7 @@ export interface FinancialDonationForm {
   nome: string;
   telefone: string;
   valorEstimado: string;
+  isThirdParty: boolean;
 }
 
 export interface MaterialDonationForm {
@@ -26,6 +27,11 @@ export interface MaterialDonationForm {
   descricao: string;
   formaEntrega: DeliveryMethod | "";
   observacoes: string;
+  isThirdParty: boolean;
 }
 
-export type DonationStep = "escolha" | "financeira" | "material" | "confirmacao";
+export type DonationStep =
+  | "escolha"
+  | "financeira"
+  | "material"
+  | "confirmacao";

@@ -18,6 +18,7 @@ import {
   donationKindLabel,
   donationStatusBadgeClass,
   donationStatusLabel,
+  donationSourceLabel,
   formatCurrencyBRL,
 } from "./donor-utils";
 import { DonationReceiptModal } from "./donation-receipt-modal";
@@ -136,6 +137,10 @@ function DonationCard({ donation, onViewReceipt }: DonationCardProps) {
                 {formatDateBR(donation.date)}
               </span>
               <span>•</span>
+              <span>
+                {donationSourceLabel[donation.donorSource ?? "titular"]}
+              </span>
+              <span>•</span>
               {renderDonationDetail(donation)}
             </p>
           </div>
@@ -160,7 +165,10 @@ function DonationCard({ donation, onViewReceipt }: DonationCardProps) {
           )}
 
           {/* Comprovante — só habilitado quando confirmada e com protocolo */}
-          {donation.kind === "financeira" && donation.protocol && !isPending && !isCancelled ? (
+          {donation.kind === "financeira" &&
+          donation.protocol &&
+          !isPending &&
+          !isCancelled ? (
             <Button
               variant="outline"
               onClick={onViewReceipt}
@@ -193,14 +201,16 @@ function DonationCard({ donation, onViewReceipt }: DonationCardProps) {
       {isPending && (
         <div className="mt-4 flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-2.5 text-xs text-blue-700">
           <Clock className="h-3.5 w-3.5 shrink-0" />
-          Sua doação foi recebida e está sendo analisada pela equipe. Em breve você receberá uma confirmação.
+          Sua doação foi recebida e está sendo analisada pela equipe. Em breve
+          você receberá uma confirmação.
         </div>
       )}
 
       {isCancelled && (
         <div className="mt-4 flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-xs text-gray-500">
           <XCircle className="h-3.5 w-3.5 shrink-0" />
-          Esta doação foi cancelada. Entre em contato com a equipe se tiver dúvidas.
+          Esta doação foi cancelada. Entre em contato com a equipe se tiver
+          dúvidas.
         </div>
       )}
     </li>

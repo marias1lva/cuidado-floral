@@ -48,11 +48,19 @@ export function DonationModal({
 
   function handleFinancialConfirm(form: FinancialDonationForm) {
     const now = new Date().toISOString();
+    const isThirdParty = form.isThirdParty;
+    const donorName = form.nome.trim() || DEMO_DONOR_NAME;
+    const donorPhone = form.telefone.trim() || undefined;
     const donation: Donation = {
       id: buildDonationId(),
       donorId: DEMO_DONOR_ID,
-      donorName: form.nome.trim() || DEMO_DONOR_NAME,
-      donorPhone: form.telefone.trim() || undefined,
+      donorName,
+      donorPhone,
+      donorSource: isThirdParty ? "terceiro" : "titular",
+      profileOwnerId: DEMO_DONOR_ID,
+      profileOwnerName: DEMO_DONOR_NAME,
+      thirdPartyName: isThirdParty ? donorName : undefined,
+      thirdPartyPhone: isThirdParty ? donorPhone : undefined,
       kind: "financeira",
       date: now,
       status: "pendente",
@@ -65,11 +73,19 @@ export function DonationModal({
   }
 
   function handleMaterialConfirm(form: MaterialDonationForm) {
+    const isThirdParty = form.isThirdParty;
+    const donorName = form.nome.trim() || DEMO_DONOR_NAME;
+    const donorPhone = form.telefone.trim() || undefined;
     const donation: Donation = {
       id: buildDonationId(),
       donorId: DEMO_DONOR_ID,
-      donorName: form.nome.trim() || DEMO_DONOR_NAME,
-      donorPhone: form.telefone.trim() || undefined,
+      donorName,
+      donorPhone,
+      donorSource: isThirdParty ? "terceiro" : "titular",
+      profileOwnerId: DEMO_DONOR_ID,
+      profileOwnerName: DEMO_DONOR_NAME,
+      thirdPartyName: isThirdParty ? donorName : undefined,
+      thirdPartyPhone: isThirdParty ? donorPhone : undefined,
       kind: "material",
       date: new Date().toISOString(),
       status: "pendente",
