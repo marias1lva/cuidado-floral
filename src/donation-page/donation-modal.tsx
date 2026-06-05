@@ -14,6 +14,7 @@ import { buildDonationId, buildDonationProtocol } from "../domain/donor-data";
 import { DEMO_DONOR_ID, DEMO_DONOR_NAME } from "../domain/storage";
 import type { Donation } from "../domain/types";
 import { useBodyScrollLock } from "../ui/use-body-scroll-lock";
+import { parseCurrencyInput } from "../ui/currency-input";
 
 interface DonationModalProps {
   isOpen: boolean;
@@ -22,15 +23,14 @@ interface DonationModalProps {
 }
 
 function parseAmount(input: string): number | undefined {
-  if (!input) {
-    return undefined;
-  }
-  const normalized = input.replace(/[^\d,.-]/g, "").replace(",", ".");
-  const value = Number.parseFloat(normalized);
-  return Number.isFinite(value) ? value : undefined;
+  return parseCurrencyInput(input);
 }
 
-export function DonationModal({ isOpen, onClose, onCreate }: DonationModalProps) {
+export function DonationModal({
+  isOpen,
+  onClose,
+  onCreate,
+}: DonationModalProps) {
   const [step, setStep] = useState<DonationStep>("escolha");
   const [donationType, setDonationType] = useState<DonationType>(null);
   useBodyScrollLock(isOpen);
@@ -99,7 +99,8 @@ export function DonationModal({ isOpen, onClose, onCreate }: DonationModalProps)
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm"
       onClick={(e) => {
-        if (e.target === e.currentTarget && step !== "confirmacao") handleClose();
+        if (e.target === e.currentTarget && step !== "confirmacao")
+          handleClose();
       }}
     >
       <div className="relative flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-pink-100 bg-white shadow-xl shadow-pink-100/40">
@@ -149,14 +150,22 @@ export function DonationModal({ isOpen, onClose, onCreate }: DonationModalProps)
           )}
 
           {step === "financeira" && (
-            <FinancialDonation onBack={handleBack} onConfirm={handleFinancialConfirm} />
+            <FinancialDonation
+              onBack={handleBack}
+              onConfirm={handleFinancialConfirm}
+            />
           )}
 
           {step === "material" && (
-            <MaterialDonation onBack={handleBack} onConfirm={handleMaterialConfirm} />
+            <MaterialDonation
+              onBack={handleBack}
+              onConfirm={handleMaterialConfirm}
+            />
           )}
 
-          {step === "confirmacao" && <DonationConfirmation onClose={handleClose} />}
+          {step === "confirmacao" && (
+            <DonationConfirmation onClose={handleClose} />
+          )}
         </div>
       </div>
     </div>
