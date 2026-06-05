@@ -13,6 +13,7 @@ import { DonationConfirmation } from "./donation-confirmation";
 import { buildDonationId, buildDonationProtocol } from "../domain/donor-data";
 import { DEMO_DONOR_ID, DEMO_DONOR_NAME } from "../domain/storage";
 import type { Donation } from "../domain/types";
+import { useBodyScrollLock } from "../ui/use-body-scroll-lock";
 
 interface DonationModalProps {
   isOpen: boolean;
@@ -32,6 +33,7 @@ function parseAmount(input: string): number | undefined {
 export function DonationModal({ isOpen, onClose, onCreate }: DonationModalProps) {
   const [step, setStep] = useState<DonationStep>("escolha");
   const [donationType, setDonationType] = useState<DonationType>(null);
+  useBodyScrollLock(isOpen);
 
   function handleClose() {
     setStep("escolha");
@@ -87,6 +89,12 @@ export function DonationModal({ isOpen, onClose, onCreate }: DonationModalProps)
 
   if (!isOpen) return null;
 
+  const stepsOrder: DonationStep[] =
+    donationType === "material"
+      ? ["escolha", "material", "confirmacao"]
+      : ["escolha", "financeira", "confirmacao"];
+  const currentIndex = stepsOrder.indexOf(step);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm"
@@ -94,56 +102,62 @@ export function DonationModal({ isOpen, onClose, onCreate }: DonationModalProps)
         if (e.target === e.currentTarget && step !== "confirmacao") handleClose();
       }}
     >
-      <div className="relative w-full max-w-md rounded-3xl border border-pink-100 bg-white p-6 shadow-xl shadow-pink-100/40 max-h-[90vh] overflow-y-auto">
+      <div className="relative flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-pink-100 bg-white shadow-xl shadow-pink-100/40">
         {step !== "confirmacao" && (
-          <button
-            type="button"
-            onClick={handleClose}
-            className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-          >
-            <X size={16} />
-          </button>
-        )}
+          <div className="shrink-0 px-6 pb-4 pt-5">
+            <div className="mb-4 flex justify-end">
+              <button
+                type="button"
+                onClick={handleClose}
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-pink-100 bg-white text-gray-400 shadow-sm transition-colors hover:bg-pink-50 hover:text-pink-600"
+                aria-label="Fechar doação"
+              >
+                <X size={18} />
+              </button>
+            </div>
 
-        {step !== "confirmacao" && (
-          <div className="mb-5 flex items-center gap-1.5">
-            {(["escolha", "financeira", "confirmacao"] as const).map((s, i) => {
-              const stepsOrder: DonationStep[] =
-                donationType === "material"
-                  ? ["escolha", "material", "confirmacao"]
-                  : ["escolha", "financeira", "confirmacao"];
-              const currentIndex = stepsOrder.indexOf(step);
-              const isActive = i <= currentIndex;
-              return (
-                <div
-                  key={s}
-                  className={`h-1.5 flex-1 rounded-full transition-colors ${
-                    isActive ? "bg-pink-500" : "bg-gray-100"
-                  }`}
-                />
-              );
-            })}
+            <div className="flex items-center gap-1.5">
+              {stepsOrder.map((s, i) => {
+                const isActive = i <= currentIndex;
+                return (
+                  <div
+                    key={s}
+                    className={`h-1.5 flex-1 rounded-full transition-colors ${
+                      isActive ? "bg-pink-500" : "bg-gray-100"
+                    }`}
+                  />
+                );
+              })}
+            </div>
           </div>
         )}
 
-        {step === "escolha" && (
-          <DonationChoice
-            selected={donationType}
-            onSelect={setDonationType}
-            onContinue={handleContinue}
-            onCancel={handleClose}
-          />
-        )}
+        <div
+          className={
+            step === "confirmacao"
+              ? "pretty-scrollbar min-h-0 overflow-y-auto p-6"
+              : "pretty-scrollbar min-h-0 overflow-y-auto px-6 pb-6"
+          }
+        >
+          {step === "escolha" && (
+            <DonationChoice
+              selected={donationType}
+              onSelect={setDonationType}
+              onContinue={handleContinue}
+              onCancel={handleClose}
+            />
+          )}
 
-        {step === "financeira" && (
-          <FinancialDonation onBack={handleBack} onConfirm={handleFinancialConfirm} />
-        )}
+          {step === "financeira" && (
+            <FinancialDonation onBack={handleBack} onConfirm={handleFinancialConfirm} />
+          )}
 
-        {step === "material" && (
-          <MaterialDonation onBack={handleBack} onConfirm={handleMaterialConfirm} />
-        )}
+          {step === "material" && (
+            <MaterialDonation onBack={handleBack} onConfirm={handleMaterialConfirm} />
+          )}
 
-        {step === "confirmacao" && <DonationConfirmation onClose={handleClose} />}
+          {step === "confirmacao" && <DonationConfirmation onClose={handleClose} />}
+        </div>
       </div>
     </div>
   );

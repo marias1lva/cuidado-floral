@@ -390,7 +390,7 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
             </CardHeader>
             <CardContent>
               <div className="overflow-hidden rounded-lg border border-pink-100">
-                <div className="overflow-x-auto">
+                <div className="pretty-scrollbar overflow-x-auto">
                   <table className="w-full text-left text-sm">
                     <thead>
                       <tr className="bg-pink-200 text-slate-800">

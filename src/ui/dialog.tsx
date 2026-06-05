@@ -2,6 +2,7 @@ import * as React from "react";
 import { X } from "lucide-react";
 
 import { cn } from "./utils";
+import { useBodyScrollLock } from "./use-body-scroll-lock";
 
 interface DialogProps {
   open: boolean;
@@ -20,6 +21,8 @@ export function Dialog({
   children,
   className,
 }: DialogProps) {
+  useBodyScrollLock(open);
+
   React.useEffect(() => {
     if (!open) {
       return;
@@ -31,12 +34,9 @@ export function Dialog({
       }
     }
 
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     window.addEventListener("keydown", handleEscape);
 
     return () => {
-      document.body.style.overflow = originalOverflow;
       window.removeEventListener("keydown", handleEscape);
     };
   }, [open, onClose]);
@@ -83,7 +83,7 @@ export function Dialog({
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-6 sm:px-8">
+        <div className="pretty-scrollbar flex-1 overflow-y-auto px-6 py-6 sm:px-8">
           {children}
         </div>
       </div>
