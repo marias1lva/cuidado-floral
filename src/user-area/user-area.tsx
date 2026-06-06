@@ -1,11 +1,23 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Heart, LogOut, User, Bell, Phone, Mail, MapPin } from "lucide-react";
 import { DonationModal } from "../donation-page/donation-modal";
 import { DonorDashboard } from "./donor/donor-dashboard";
 import { PatientDashboard } from "./patient/patient-dashboard";
-import { DEMO_DONOR_ID, DEMO_DONOR_NAME, DEMO_PATIENT_NAME } from "../domain/storage";
+import {
+  DEMO_DONOR_ID,
+  DEMO_DONOR_NAME,
+  DEMO_PATIENT_ID,
+  DEMO_PATIENT_NAME,
+} from "../domain/storage";
 import { loadDonations, saveDonations } from "../domain/donor-data";
-import type { Donation } from "../domain/types";
+import { loadNotifications, saveNotifications } from "../domain/patient-data";
+import type { AppNotification, Donation } from "../domain/types";
+import { Badge } from "../ui/badge";
+import {
+  formatDateTimeBR,
+  notificationTypeBadgeClass,
+  notificationTypeLabel,
+} from "./patient/patient-utils";
 
 type UserAreaRole = "paciente" | "doador";
 
@@ -40,6 +52,10 @@ export function UserArea({ role, onLogout }: UserAreaProps) {
   const [isDonationModalOpen, setIsDonationModalOpen] = useState(false);
   const [donations, setDonations] = useState<Donation[]>([]);
   const [hasLoadedDonations, setHasLoadedDonations] = useState(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [hasLoadedNotifications, setHasLoadedNotifications] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -60,24 +76,123 @@ export function UserArea({ role, onLogout }: UserAreaProps) {
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+
+    void loadNotifications()
+      .then((items) => {
+        if (!isMounted) return;
+        setNotifications(items);
+        setHasLoadedNotifications(true);
+      })
+      .catch((error) => {
+        console.error("Falha ao carregar notificações", error);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!hasLoadedDonations) return;
     void saveDonations(donations).catch((error) => {
       console.error("Falha ao salvar doações", error);
     });
   }, [donations, hasLoadedDonations]);
 
+  useEffect(() => {
+    if (!hasLoadedNotifications) return;
+    void saveNotifications(notifications).catch((error) => {
+      console.error("Falha ao salvar notificações", error);
+    });
+  }, [notifications, hasLoadedNotifications]);
+
+  useEffect(() => {
+    if (!isNotificationsOpen) return;
+
+    function handleClickOutside(event: MouseEvent) {
+      if (!notificationsRef.current) return;
+      const target = event.target;
+      if (
+        target instanceof Node &&
+        !notificationsRef.current.contains(target)
+      ) {
+        setIsNotificationsOpen(false);
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsNotificationsOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isNotificationsOpen]);
+
   const donorDonations = useMemo(
     () => donations.filter((d) => d.donorId === DEMO_DONOR_ID),
     [donations],
+  );
+
+  const userNotifications = useMemo(() => {
+    const byRole =
+      role === "paciente"
+        ? notifications.filter(
+            (item) =>
+              item.recipientRole === "paciente" &&
+              (!item.recipientId || item.recipientId === DEMO_PATIENT_ID),
+          )
+        : notifications.filter(
+            (item) =>
+              item.recipientRole === "doador" &&
+              (!item.recipientId || item.recipientId === DEMO_DONOR_ID),
+          );
+
+    return byRole.sort((a, b) => b.date.localeCompare(a.date));
+  }, [notifications, role]);
+
+  const unreadCount = useMemo(
+    () => userNotifications.filter((item) => !item.read).length,
+    [userNotifications],
   );
 
   function handleCreateDonation(donation: Donation) {
     setDonations((current) => [donation, ...current]);
   }
 
+  function handleMarkNotificationAsRead(notificationId: string) {
+    setNotifications((current) =>
+      current.map((item) =>
+        item.id === notificationId ? { ...item, read: true } : item,
+      ),
+    );
+  }
+
+  function handleMarkAllAsRead() {
+    if (unreadCount === 0) return;
+    const targetRole = role === "paciente" ? "paciente" : "doador";
+    const targetRecipientId =
+      role === "paciente" ? DEMO_PATIENT_ID : DEMO_DONOR_ID;
+
+    setNotifications((current) =>
+      current.map((item) => {
+        const isTarget =
+          item.recipientRole === targetRole &&
+          (!item.recipientId || item.recipientId === targetRecipientId);
+        return isTarget ? { ...item, read: true } : item;
+      }),
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-[var(--background)] text-[var(--foreground)]">
-
       <nav className="flex items-center justify-between px-6 py-3 bg-white border-b border-[var(--border)]">
         <div className="flex items-center gap-3">
           <div
@@ -97,9 +212,103 @@ export function UserArea({ role, onLogout }: UserAreaProps) {
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="relative cursor-pointer">
-            <Bell size={20} className="text-[var(--muted-foreground)]" />
-            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[var(--primary)]" />
+          <div className="relative" ref={notificationsRef}>
+            <button
+              type="button"
+              onClick={() => setIsNotificationsOpen((current) => !current)}
+              className="relative cursor-pointer rounded-full p-1.5 transition-colors hover:bg-pink-50"
+              aria-label="Abrir notificações"
+              aria-haspopup="menu"
+              aria-expanded={isNotificationsOpen}
+            >
+              <Bell size={20} className="text-[var(--muted-foreground)]" />
+              {unreadCount > 0 && (
+                <>
+                  <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-[var(--primary)]" />
+                  <span className="absolute -right-2 -top-2 min-w-[1.1rem] rounded-full bg-pink-600 px-1 text-center text-[10px] font-semibold text-white">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                </>
+              )}
+            </button>
+
+            {isNotificationsOpen && (
+              <div
+                className="absolute right-0 z-40 mt-2 w-96 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-pink-100 bg-white shadow-lg shadow-pink-100/40"
+                role="menu"
+              >
+                <div className="flex items-center justify-between border-b border-pink-100 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--primary)]">
+                      Notificações
+                    </p>
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      {unreadCount > 0
+                        ? `${unreadCount} não ${unreadCount === 1 ? "lida" : "lidas"}`
+                        : "Sem pendências"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleMarkAllAsRead}
+                    disabled={unreadCount === 0}
+                    className="rounded-full border border-pink-200 px-3 py-1 text-xs font-semibold text-pink-700 transition-colors hover:bg-pink-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Marcar tudo
+                  </button>
+                </div>
+
+                {userNotifications.length === 0 ? (
+                  <div className="px-4 py-5 text-sm text-[var(--muted-foreground)]">
+                    Você ainda não tem notificações.
+                  </div>
+                ) : (
+                  <ul className="pretty-scrollbar max-h-80 space-y-2 overflow-y-auto p-3">
+                    {userNotifications.map((item) => (
+                      <li
+                        key={item.id}
+                        className={`rounded-xl border p-3 ${
+                          item.read
+                            ? "border-gray-100 bg-gray-50/80"
+                            : "border-pink-200 bg-pink-50/70"
+                        }`}
+                      >
+                        <div className="mb-1.5 flex items-start justify-between gap-2">
+                          <p className="text-sm font-medium text-[var(--foreground)]">
+                            {item.title}
+                          </p>
+                          <Badge
+                            variant="outline"
+                            className={notificationTypeBadgeClass[item.type]}
+                          >
+                            {notificationTypeLabel[item.type]}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-[var(--muted-foreground)]">
+                          {item.message}
+                        </p>
+                        <div className="mt-2 flex items-center justify-between">
+                          <span className="text-[11px] text-[var(--muted-foreground)]">
+                            {formatDateTimeBR(item.date)}
+                          </span>
+                          {!item.read && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleMarkNotificationAsRead(item.id)
+                              }
+                              className="text-xs font-semibold text-pink-700 hover:text-pink-800"
+                            >
+                              Marcar como lida
+                            </button>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
@@ -143,7 +352,7 @@ export function UserArea({ role, onLogout }: UserAreaProps) {
         )}
       </main>
 
-            <footer className="mt-auto border-t border-[var(--border)] bg-[var(--background)] pb-4 pt-10">
+      <footer className="mt-auto border-t border-[var(--border)] bg-[var(--background)] pb-4 pt-10">
         <div className="mx-auto w-full max-w-[1200px] px-4">
           <div className="mb-8 grid grid-cols-1 gap-8 sm:grid-cols-3">
             <div>

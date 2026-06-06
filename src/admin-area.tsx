@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
   Download,
@@ -28,12 +28,14 @@ import {
   saveManagedUsers,
   type Campaign,
 } from "./domain/admin-data";
+import { loadNotifications, saveNotifications } from "./domain/patient-data";
 import {
   buildCsv,
   downloadCsv,
   downloadPdfReport,
   type CsvColumn,
 } from "./domain/reports";
+import type { AppNotification } from "./domain/types";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import {
@@ -43,6 +45,11 @@ import {
   CardHeader,
   CardTitle,
 } from "./ui/card";
+import {
+  formatDateTimeBR,
+  notificationTypeBadgeClass,
+  notificationTypeLabel,
+} from "./user-area/patient/patient-utils";
 
 type AdminTab = "users" | "campaigns" | "donations" | "reports";
 
@@ -74,6 +81,10 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<ManagedUser | null>(null);
   const [hasLoadedUsers, setHasLoadedUsers] = useState(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [hasLoadedNotifications, setHasLoadedNotifications] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -95,11 +106,95 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+
+    void loadNotifications()
+      .then((items) => {
+        if (!isMounted) return;
+        setNotifications(items);
+        setHasLoadedNotifications(true);
+      })
+      .catch((error) => {
+        console.error("Falha ao carregar notificações", error);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!hasLoadedUsers) return;
     void saveManagedUsers(users).catch((error) => {
       console.error("Falha ao salvar usuários", error);
     });
   }, [users, hasLoadedUsers]);
+
+  useEffect(() => {
+    if (!hasLoadedNotifications) return;
+    void saveNotifications(notifications).catch((error) => {
+      console.error("Falha ao salvar notificações", error);
+    });
+  }, [notifications, hasLoadedNotifications]);
+
+  useEffect(() => {
+    if (!isNotificationsOpen) return;
+
+    function handleClickOutside(event: MouseEvent) {
+      if (!notificationsRef.current) return;
+      const target = event.target;
+      if (
+        target instanceof Node &&
+        !notificationsRef.current.contains(target)
+      ) {
+        setIsNotificationsOpen(false);
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsNotificationsOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isNotificationsOpen]);
+
+  const adminNotifications = useMemo(
+    () =>
+      notifications
+        .filter((item) => item.recipientRole === "admin")
+        .sort((a, b) => b.date.localeCompare(a.date)),
+    [notifications],
+  );
+
+  const unreadCount = useMemo(
+    () => adminNotifications.filter((item) => !item.read).length,
+    [adminNotifications],
+  );
+
+  function handleMarkNotificationAsRead(notificationId: string) {
+    setNotifications((current) =>
+      current.map((item) =>
+        item.id === notificationId ? { ...item, read: true } : item,
+      ),
+    );
+  }
+
+  function handleMarkAllAsRead() {
+    if (unreadCount === 0) return;
+    setNotifications((current) =>
+      current.map((item) =>
+        item.recipientRole === "admin" ? { ...item, read: true } : item,
+      ),
+    );
+  }
 
   const userExportColumns: CsvColumn<ManagedUser>[] = [
     { header: "Nome", value: (row) => row.name },
@@ -215,9 +310,103 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="relative cursor-pointer">
-            <Bell size={20} className="text-[var(--muted-foreground)]" />
-            <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[var(--primary)]" />
+          <div className="relative" ref={notificationsRef}>
+            <button
+              type="button"
+              onClick={() => setIsNotificationsOpen((current) => !current)}
+              className="relative cursor-pointer rounded-full p-1.5 transition-colors hover:bg-pink-50"
+              aria-label="Abrir notificações"
+              aria-haspopup="menu"
+              aria-expanded={isNotificationsOpen}
+            >
+              <Bell size={20} className="text-[var(--muted-foreground)]" />
+              {unreadCount > 0 && (
+                <>
+                  <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[var(--primary)]" />
+                  <span className="absolute -right-2 -top-2 min-w-[1.1rem] rounded-full bg-pink-600 px-1 text-center text-[10px] font-semibold text-white">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                </>
+              )}
+            </button>
+
+            {isNotificationsOpen && (
+              <div
+                className="absolute right-0 z-40 mt-2 w-96 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-pink-100 bg-white shadow-lg shadow-pink-100/40"
+                role="menu"
+              >
+                <div className="flex items-center justify-between border-b border-pink-100 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--primary)]">
+                      Notificações
+                    </p>
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      {unreadCount > 0
+                        ? `${unreadCount} não ${unreadCount === 1 ? "lida" : "lidas"}`
+                        : "Sem pendências"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleMarkAllAsRead}
+                    disabled={unreadCount === 0}
+                    className="rounded-full border border-pink-200 px-3 py-1 text-xs font-semibold text-pink-700 transition-colors hover:bg-pink-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Marcar tudo
+                  </button>
+                </div>
+
+                {adminNotifications.length === 0 ? (
+                  <div className="px-4 py-5 text-sm text-[var(--muted-foreground)]">
+                    Você ainda não tem notificações.
+                  </div>
+                ) : (
+                  <ul className="pretty-scrollbar max-h-80 space-y-2 overflow-y-auto p-3">
+                    {adminNotifications.map((item) => (
+                      <li
+                        key={item.id}
+                        className={`rounded-xl border p-3 ${
+                          item.read
+                            ? "border-gray-100 bg-gray-50/80"
+                            : "border-pink-200 bg-pink-50/70"
+                        }`}
+                      >
+                        <div className="mb-1.5 flex items-start justify-between gap-2">
+                          <p className="text-sm font-medium text-[var(--foreground)]">
+                            {item.title}
+                          </p>
+                          <Badge
+                            variant="outline"
+                            className={notificationTypeBadgeClass[item.type]}
+                          >
+                            {notificationTypeLabel[item.type]}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-[var(--muted-foreground)]">
+                          {item.message}
+                        </p>
+                        <div className="mt-2 flex items-center justify-between">
+                          <span className="text-[11px] text-[var(--muted-foreground)]">
+                            {formatDateTimeBR(item.date)}
+                          </span>
+                          {!item.read && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleMarkNotificationAsRead(item.id)
+                              }
+                              className="text-xs font-semibold text-pink-700 hover:text-pink-800"
+                            >
+                              Marcar como lida
+                            </button>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
             <User size={17} />
@@ -239,7 +428,8 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
             Painel Administrativo
           </h1>
           <p className="text-muted-foreground">
-            Gerencie usuários, doações, campanhas e visualize relatórios do sistema
+            Gerencie usuários, doações, campanhas e visualize relatórios do
+            sistema
           </p>
         </div>
 
