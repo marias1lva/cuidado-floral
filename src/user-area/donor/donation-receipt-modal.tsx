@@ -3,14 +3,12 @@ import { FileDown, Receipt } from "lucide-react";
 import { Button } from "../../ui/button";
 import { Dialog } from "../../ui/dialog";
 import type { Donation } from "../../domain/types";
-import {
-  downloadPdfReport,
-  type CsvColumn,
-} from "../../domain/reports";
+import { downloadPdfReport, type CsvColumn } from "../../domain/reports";
 import {
   donationStatusLabel,
   formatCurrencyBRL,
   formatDateTimeBR,
+  donationSourceLabel,
 } from "./donor-utils";
 
 interface DonationReceiptModalProps {
@@ -46,6 +44,10 @@ export function DonationReceiptModal({
       { label: "Emitido em", value: issuedAt },
       { label: "Doador", value: donation.donorName },
       { label: "Telefone", value: donation.donorPhone ?? "—" },
+      {
+        label: "Origem",
+        value: donationSourceLabel[donation.donorSource ?? "titular"],
+      },
       { label: "Tipo de doação", value: "Financeira" },
       { label: "Valor", value: amountText },
       { label: "Campanha", value: donation.campaign ?? "—" },
@@ -55,7 +57,8 @@ export function DonationReceiptModal({
       `comprovante-${protocol}.pdf`,
       {
         title: `Comprovante de Doação — ${protocol}`,
-        subtitle: "Este comprovante confirma o registro da intenção de doação financeira.",
+        subtitle:
+          "Este comprovante confirma o registro da intenção de doação financeira.",
       },
       [{ title: "Dados da doação", columns, rows }],
     );
@@ -92,16 +95,17 @@ export function DonationReceiptModal({
         <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
           <Field label="Doador" value={donation.donorName} />
           <Field label="Telefone" value={donation.donorPhone ?? "—"} />
+          <Field
+            label="Origem"
+            value={donationSourceLabel[donation.donorSource ?? "titular"]}
+          />
           <Field label="Tipo" value="Financeira" />
           <Field label="Valor" value={amountText} />
           <Field
             label="Campanha"
             value={donation.campaign ?? "Sem campanha vinculada"}
           />
-          <Field
-            label="Status"
-            value={donationStatusLabel[donation.status]}
-          />
+          <Field label="Status" value={donationStatusLabel[donation.status]} />
         </dl>
 
         <div className="rounded-xl border border-pink-100 bg-white p-4 text-xs text-[var(--muted-foreground)]">

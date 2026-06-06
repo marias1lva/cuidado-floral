@@ -22,10 +22,17 @@ import {
   CardTitle,
 } from "../ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
+import {
   deliveryMethodLabel,
   donationItemLabel,
   donationKindLabel,
-  donationStatusLabel,
+  donationSourceLabel,
   formatCurrencyBRL,
   formatDateTimeBR,
 } from "../user-area/donor/donor-utils";
@@ -45,6 +52,7 @@ const adminDonationStatusLabel: Record<DonationStatus, string> = {
 
 type StatusFilter = "all" | DonationStatus;
 type KindFilter = "all" | DonationKind;
+type SourceFilter = "all" | "titular" | "terceiro";
 
 export function AdminDonations() {
   const [donations, setDonations] = useState<Donation[]>([]);
@@ -52,6 +60,7 @@ export function AdminDonations() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("pendente");
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -75,8 +84,13 @@ export function AdminDonations() {
     () =>
       donations
         .filter((d) => statusFilter === "all" || d.status === statusFilter)
-        .filter((d) => kindFilter === "all" || d.kind === kindFilter),
-    [donations, statusFilter, kindFilter],
+        .filter((d) => kindFilter === "all" || d.kind === kindFilter)
+        .filter(
+          (d) =>
+            sourceFilter === "all" ||
+            (d.donorSource ?? "titular") === sourceFilter,
+        ),
+    [donations, statusFilter, kindFilter, sourceFilter],
   );
 
   const pendingCount = donations.filter((d) => d.status === "pendente").length;
@@ -184,6 +198,15 @@ export function AdminDonations() {
                   { value: "material", label: "Materiais" },
                 ]}
               />
+              <FilterSelect
+                value={sourceFilter}
+                onChange={(v) => setSourceFilter(v as SourceFilter)}
+                options={[
+                  { value: "all", label: "Todas as origens" },
+                  { value: "titular", label: "Titular do perfil" },
+                  { value: "terceiro", label: "Terceiro usando perfil" },
+                ]}
+              />
             </div>
           </div>
         </CardHeader>
@@ -282,6 +305,7 @@ function DonationRow({
             {donation.kind === "material" && donation.itemType
               ? ` · ${donationItemLabel[donation.itemType]}`
               : ""}
+            {` · ${donationSourceLabel[donation.donorSource ?? "titular"]}`}
           </p>
         </div>
 
@@ -358,6 +382,16 @@ function DonationRow({
           <div className="grid grid-cols-1 gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
             <DetailItem label="Doador" value={donation.donorName} />
 
+            <DetailItem
+              label="Perfil utilizado"
+              value={donation.profileOwnerName ?? donation.donorName}
+            />
+
+            <DetailItem
+              label="ID do perfil"
+              value={donation.profileOwnerId ?? donation.donorId}
+            />
+
             {donation.donorPhone && (
               <DetailItem
                 label="Telefone"
@@ -370,15 +404,27 @@ function DonationRow({
               />
             )}
 
-            <DetailItem
-              label="Data"
-              value={formatDateTimeBR(donation.date)}
-            />
+            <DetailItem label="Data" value={formatDateTimeBR(donation.date)} />
+
+            <DetailItem label="Tipo" value={donationKindLabel[donation.kind]} />
 
             <DetailItem
-              label="Tipo"
-              value={donationKindLabel[donation.kind]}
+              label="Origem"
+              value={donationSourceLabel[donation.donorSource ?? "titular"]}
             />
+
+            {(donation.donorSource ?? "titular") === "terceiro" && (
+              <>
+                <DetailItem
+                  label="Nome do terceiro"
+                  value={donation.thirdPartyName ?? donation.donorName}
+                />
+                <DetailItem
+                  label="Telefone do terceiro"
+                  value={donation.thirdPartyPhone ?? donation.donorPhone ?? "—"}
+                />
+              </>
+            )}
 
             {donation.kind === "financeira" && (
               <DetailItem
@@ -521,16 +567,17 @@ interface FilterSelectProps {
 
 function FilterSelect({ value, onChange, options }: FilterSelectProps) {
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="rounded-full border border-pink-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 outline-none transition-colors hover:border-pink-400 focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
-    >
-      {options.map((opt) => (
-        <option key={opt.value} value={opt.value}>
-          {opt.label}
-        </option>
-      ))}
-    </select>
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger size="sm" className="w-36 text-xs font-medium">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((opt) => (
+          <SelectItem key={opt.value} value={opt.value} className="text-xs">
+            {opt.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

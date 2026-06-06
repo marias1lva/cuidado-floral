@@ -14,6 +14,7 @@ import {
 } from "./patient-utils";
 import { PatientHistoryForm } from "./patient-history-form";
 import { AppointmentAttachments } from "./appointment-attachments";
+import { useBodyScrollLock } from "../../ui/use-body-scroll-lock";
 
 interface PatientHistoryModalProps {
   patient: Patient;
@@ -32,6 +33,8 @@ export function PatientHistoryModal({
   onSave,
   onDelete,
 }: PatientHistoryModalProps) {
+  useBodyScrollLock(true);
+
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -100,7 +103,7 @@ export function PatientHistoryModal({
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+        <div className="pretty-scrollbar flex-1 space-y-5 overflow-y-auto px-6 py-5">
           {!isFormOpen && (
             <div className="flex justify-end">
               <Button

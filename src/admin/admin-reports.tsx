@@ -22,7 +22,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../ui/card";
-import { Input } from "../ui/input";
+import { DatePicker } from "../ui/date-time-picker";
 import {
   Select,
   SelectContent,
@@ -65,6 +65,7 @@ import {
 import {
   donationItemLabel,
   donationKindLabel,
+  donationSourceLabel,
   donationStatusBadgeClass,
   donationStatusLabel,
   formatCurrencyBRL,
@@ -78,13 +79,14 @@ const categoryLabelMap: Record<string, string> = Object.fromEntries(
 type AppointmentStatusFilter = "all" | AppointmentStatus;
 type DonationKindFilter = "all" | DonationKind;
 type DonationStatusFilter = "all" | DonationStatus;
+type DonationSourceFilter = "all" | "titular" | "terceiro";
 
 export function AdminReports() {
   const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
   const [allDonations, setAllDonations] = useState<Donation[]>([]);
-  const [allVolunteerHours, setAllVolunteerHours] = useState<VolunteerHourEntry[]>(
-    [],
-  );
+  const [allVolunteerHours, setAllVolunteerHours] = useState<
+    VolunteerHourEntry[]
+  >([]);
 
   const [range, setRange] = useState<DateRange>({});
   const [appointmentStatus, setAppointmentStatus] =
@@ -92,11 +94,17 @@ export function AdminReports() {
   const [donationKind, setDonationKind] = useState<DonationKindFilter>("all");
   const [donationStatus, setDonationStatus] =
     useState<DonationStatusFilter>("all");
+  const [donationSource, setDonationSource] =
+    useState<DonationSourceFilter>("all");
 
   useEffect(() => {
     let isMounted = true;
 
-    void Promise.all([loadAppointments(), loadDonations(), loadVolunteerHours()])
+    void Promise.all([
+      loadAppointments(),
+      loadDonations(),
+      loadVolunteerHours(),
+    ])
       .then(([appointments, donations, hours]) => {
         if (!isMounted) return;
         setAllAppointments(appointments);
@@ -129,8 +137,13 @@ export function AdminReports() {
         .filter((d) => isWithinRange(d.date, range))
         .filter((d) => donationKind === "all" || d.kind === donationKind)
         .filter((d) => donationStatus === "all" || d.status === donationStatus)
+        .filter(
+          (d) =>
+            donationSource === "all" ||
+            (d.donorSource ?? "titular") === donationSource,
+        )
         .sort((a, b) => b.date.localeCompare(a.date)),
-    [allDonations, range, donationKind, donationStatus],
+    [allDonations, range, donationKind, donationStatus, donationSource],
   );
 
   const filteredVolunteerHours = useMemo(
@@ -177,15 +190,39 @@ export function AdminReports() {
     { header: "Data", value: (row) => formatDateTimeBR(row.date) },
     { header: "Doador", value: (row) => row.donorName },
     { header: "Telefone", value: (row) => row.donorPhone ?? "" },
+    {
+      header: "Origem",
+      value: (row) => donationSourceLabel[row.donorSource ?? "titular"],
+    },
+    {
+      header: "Perfil utilizado",
+      value: (row) => row.profileOwnerName ?? row.donorName,
+    },
+    {
+      header: "ID perfil",
+      value: (row) => row.profileOwnerId ?? row.donorId,
+    },
+    {
+      header: "Terceiro",
+      value: (row) =>
+        (row.donorSource ?? "titular") === "terceiro"
+          ? (row.thirdPartyName ?? row.donorName)
+          : "",
+    },
+    {
+      header: "Telefone terceiro",
+      value: (row) =>
+        (row.donorSource ?? "titular") === "terceiro"
+          ? (row.thirdPartyPhone ?? row.donorPhone ?? "")
+          : "",
+    },
     { header: "Tipo", value: (row) => donationKindLabel[row.kind] },
     { header: "Status", value: (row) => donationStatusLabel[row.status] },
     { header: "Campanha", value: (row) => row.campaign ?? "" },
     {
       header: "Valor",
       value: (row) =>
-        row.amount !== undefined
-          ? row.amount.toFixed(2).replace(".", ",")
-          : "",
+        row.amount !== undefined ? row.amount.toFixed(2).replace(".", ",") : "",
     },
     {
       header: "Item",
@@ -256,7 +293,10 @@ export function AdminReports() {
         title: "Relatório de Atendimentos",
         period: range,
         summary: [
-          { label: "Atendimentos", value: appointmentsSummary.total.toString() },
+          {
+            label: "Atendimentos",
+            value: appointmentsSummary.total.toString(),
+          },
           {
             label: "Pacientes únicas",
             value: appointmentsSummary.uniquePatients.toString(),
@@ -308,12 +348,12 @@ export function AdminReports() {
   }
 
   function handleExportVolunteerHoursPdf() {
-    const categoriesSummary = Object.entries(volunteerHoursSummary.byCategory).map(
-      ([category, hours]) => ({
-        label: categoryLabelMap[category] ?? category,
-        value: `${hours.toFixed(1).replace(".", ",")} h`,
-      }),
-    );
+    const categoriesSummary = Object.entries(
+      volunteerHoursSummary.byCategory,
+    ).map(([category, hours]) => ({
+      label: categoryLabelMap[category] ?? category,
+      value: `${hours.toFixed(1).replace(".", ",")} h`,
+    }));
 
     downloadPdfReport(
       `horas-voluntariado-${todayStamp()}.pdf`,
@@ -367,6 +407,7 @@ export function AdminReports() {
     setAppointmentStatus("all");
     setDonationKind("all");
     setDonationStatus("all");
+    setDonationSource("all");
   }
 
   return (
@@ -390,28 +431,26 @@ export function AdminReports() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
             <FilterField label="De">
-              <Input
-                type="date"
+              <DatePicker
                 value={range.from ?? ""}
-                onChange={(event) =>
+                onChange={(value) =>
                   setRange((current) => ({
                     ...current,
-                    from: event.target.value || undefined,
+                    from: value || undefined,
                   }))
                 }
                 className="rounded-xl border-pink-200 bg-[var(--input-background)]"
               />
             </FilterField>
             <FilterField label="Até">
-              <Input
-                type="date"
+              <DatePicker
                 value={range.to ?? ""}
-                onChange={(event) =>
+                onChange={(value) =>
                   setRange((current) => ({
                     ...current,
-                    to: event.target.value || undefined,
+                    to: value || undefined,
                   }))
                 }
                 className="rounded-xl border-pink-200 bg-[var(--input-background)]"
@@ -440,7 +479,9 @@ export function AdminReports() {
             <FilterField label="Tipo de doação">
               <Select
                 value={donationKind}
-                onValueChange={(value) => setDonationKind(value as DonationKindFilter)}
+                onValueChange={(value) =>
+                  setDonationKind(value as DonationKindFilter)
+                }
               >
                 <SelectTrigger className="rounded-xl border-pink-200 bg-[var(--input-background)] text-sm">
                   <SelectValue />
@@ -467,6 +508,23 @@ export function AdminReports() {
                   <SelectItem value="pendente">Pendente</SelectItem>
                   <SelectItem value="confirmada">Confirmada</SelectItem>
                   <SelectItem value="cancelada">Cancelada</SelectItem>
+                </SelectContent>
+              </Select>
+            </FilterField>
+            <FilterField label="Origem da doação">
+              <Select
+                value={donationSource}
+                onValueChange={(value) =>
+                  setDonationSource(value as DonationSourceFilter)
+                }
+              >
+                <SelectTrigger className="rounded-xl border-pink-200 bg-[var(--input-background)] text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  <SelectItem value="titular">Titular do perfil</SelectItem>
+                  <SelectItem value="terceiro">Terceiro</SelectItem>
                 </SelectContent>
               </Select>
             </FilterField>
@@ -533,7 +591,8 @@ export function AdminReports() {
               </h2>
               <p className="text-sm text-[var(--muted-foreground)]">
                 {filteredAppointments.length}{" "}
-                {filteredAppointments.length === 1 ? "registro" : "registros"} no recorte.
+                {filteredAppointments.length === 1 ? "registro" : "registros"}{" "}
+                no recorte.
               </p>
             </div>
           </div>
@@ -565,7 +624,7 @@ export function AdminReports() {
           </p>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-pink-100">
-            <div className="overflow-x-auto">
+            <div className="pretty-scrollbar overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="bg-pink-100 text-slate-800">
@@ -590,14 +649,18 @@ export function AdminReports() {
                           </div>
                         )}
                       </td>
-                      <td className="px-3 py-2 align-top">{appointment.patientName}</td>
+                      <td className="px-3 py-2 align-top">
+                        {appointment.patientName}
+                      </td>
                       <td className="px-3 py-2 align-top text-[var(--muted-foreground)]">
                         {appointment.volunteerName}
                       </td>
                       <td className="px-3 py-2 align-top">
                         <Badge
                           variant="outline"
-                          className={appointmentStatusBadgeClass[appointment.status]}
+                          className={
+                            appointmentStatusBadgeClass[appointment.status]
+                          }
                         >
                           {appointmentStatusLabel[appointment.status]}
                         </Badge>
@@ -628,11 +691,14 @@ export function AdminReports() {
               <Users className="h-5 w-5 text-pink-600" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-[var(--primary)]">Doações</h2>
+              <h2 className="text-lg font-semibold text-[var(--primary)]">
+                Doações
+              </h2>
               <p className="text-sm text-[var(--muted-foreground)]">
                 {filteredDonations.length}{" "}
-                {filteredDonations.length === 1 ? "registro" : "registros"} no recorte ·{" "}
-                {formatCurrencyBRL(donationsSummary.totalAmount)} arrecadados.
+                {filteredDonations.length === 1 ? "registro" : "registros"} no
+                recorte · {formatCurrencyBRL(donationsSummary.totalAmount)}{" "}
+                arrecadados.
               </p>
             </div>
           </div>
@@ -664,12 +730,14 @@ export function AdminReports() {
           </p>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-pink-100">
-            <div className="overflow-x-auto">
+            <div className="pretty-scrollbar overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="bg-pink-100 text-slate-800">
                     <th className="px-3 py-2 font-semibold">Data</th>
                     <th className="px-3 py-2 font-semibold">Doador</th>
+                    <th className="px-3 py-2 font-semibold">Origem</th>
+                    <th className="px-3 py-2 font-semibold">Perfil usado</th>
                     <th className="px-3 py-2 font-semibold">Tipo</th>
                     <th className="px-3 py-2 font-semibold">Detalhe</th>
                     <th className="px-3 py-2 font-semibold">Status</th>
@@ -687,7 +755,15 @@ export function AdminReports() {
                           {formatDateTimeBR(donation.date)}
                         </div>
                       </td>
-                      <td className="px-3 py-2 align-top">{donation.donorName}</td>
+                      <td className="px-3 py-2 align-top">
+                        {donation.donorName}
+                      </td>
+                      <td className="px-3 py-2 align-top">
+                        {donationSourceLabel[donation.donorSource ?? "titular"]}
+                      </td>
+                      <td className="px-3 py-2 align-top text-[var(--muted-foreground)]">
+                        {donation.profileOwnerName ?? donation.donorName}
+                      </td>
                       <td className="px-3 py-2 align-top">
                         {donationKindLabel[donation.kind]}
                       </td>
@@ -723,8 +799,10 @@ export function AdminReports() {
               </h2>
               <p className="text-sm text-[var(--muted-foreground)]">
                 {filteredVolunteerHours.length}{" "}
-                {filteredVolunteerHours.length === 1 ? "registro" : "registros"} ·{" "}
-                {volunteerHoursSummary.totalHours.toFixed(1).replace(".", ",")} h no recorte.
+                {filteredVolunteerHours.length === 1 ? "registro" : "registros"}{" "}
+                ·{" "}
+                {volunteerHoursSummary.totalHours.toFixed(1).replace(".", ",")}{" "}
+                h no recorte.
               </p>
             </div>
           </div>
@@ -756,7 +834,7 @@ export function AdminReports() {
           </p>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-pink-100">
-            <div className="overflow-x-auto">
+            <div className="pretty-scrollbar overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="bg-pink-100 text-slate-800">
@@ -765,7 +843,9 @@ export function AdminReports() {
                     <th className="px-3 py-2 font-semibold">Atividade</th>
                     <th className="px-3 py-2 font-semibold">Categoria</th>
                     <th className="px-3 py-2 font-semibold">Local</th>
-                    <th className="px-3 py-2 font-semibold text-right">Horas</th>
+                    <th className="px-3 py-2 font-semibold text-right">
+                      Horas
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -777,8 +857,12 @@ export function AdminReports() {
                       <td className="px-3 py-2 align-top whitespace-nowrap">
                         {formatDateBR(entry.date)}
                       </td>
-                      <td className="px-3 py-2 align-top">{entry.volunteerName}</td>
-                      <td className="px-3 py-2 align-top">{entry.activityName}</td>
+                      <td className="px-3 py-2 align-top">
+                        {entry.volunteerName}
+                      </td>
+                      <td className="px-3 py-2 align-top">
+                        {entry.activityName}
+                      </td>
                       <td className="px-3 py-2 align-top">
                         <Badge
                           variant="outline"
@@ -816,7 +900,8 @@ export function AdminReports() {
                 {volunteerConsolidation.length}{" "}
                 {volunteerConsolidation.length === 1
                   ? "voluntária ativa"
-                  : "voluntárias ativas"} no recorte (RN12).
+                  : "voluntárias ativas"}{" "}
+                no recorte (RN12).
               </p>
             </div>
           </div>
@@ -837,13 +922,17 @@ export function AdminReports() {
           </p>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-pink-100">
-            <div className="overflow-x-auto">
+            <div className="pretty-scrollbar overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="bg-pink-100 text-slate-800">
                     <th className="px-3 py-2 font-semibold">Voluntária</th>
-                    <th className="px-3 py-2 font-semibold text-right">Total</th>
-                    <th className="px-3 py-2 font-semibold text-right">Registros</th>
+                    <th className="px-3 py-2 font-semibold text-right">
+                      Total
+                    </th>
+                    <th className="px-3 py-2 font-semibold text-right">
+                      Registros
+                    </th>
                     <th className="px-3 py-2 font-semibold">Atividades</th>
                     <th className="px-3 py-2 font-semibold">Período</th>
                   </tr>
@@ -905,7 +994,9 @@ function FilterField({
 }) {
   return (
     <label className="block text-sm">
-      <span className="mb-1 block font-medium text-[var(--foreground)]">{label}</span>
+      <span className="mb-1 block font-medium text-[var(--foreground)]">
+        {label}
+      </span>
       {children}
     </label>
   );
@@ -919,17 +1010,29 @@ interface SummaryCardProps {
   iconBg?: string;
 }
 
-function SummaryCard({ label, value, hint, icon, iconBg = "bg-pink-100" }: SummaryCardProps) {
+function SummaryCard({
+  label,
+  value,
+  hint,
+  icon,
+  iconBg = "bg-pink-100",
+}: SummaryCardProps) {
   return (
     <div className="rounded-2xl border border-pink-100 bg-white p-5 shadow-sm shadow-pink-100/40">
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm font-medium text-[var(--foreground)]">{label}</span>
-        <div className={`flex h-10 w-10 items-center justify-center rounded-full ${iconBg}`}>
+        <span className="text-sm font-medium text-[var(--foreground)]">
+          {label}
+        </span>
+        <div
+          className={`flex h-10 w-10 items-center justify-center rounded-full ${iconBg}`}
+        >
           {icon}
         </div>
       </div>
       <p className="text-2xl font-semibold text-[var(--primary)]">{value}</p>
-      {hint && <p className="mt-1 text-xs text-[var(--muted-foreground)]">{hint}</p>}
+      {hint && (
+        <p className="mt-1 text-xs text-[var(--muted-foreground)]">{hint}</p>
+      )}
     </div>
   );
 }

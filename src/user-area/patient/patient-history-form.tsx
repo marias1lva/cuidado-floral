@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { Button } from "../../ui/button";
+import { DatePicker, TimePicker } from "../../ui/date-time-picker";
 import {
   Select,
   SelectContent,
@@ -147,19 +148,17 @@ export function PatientHistoryForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Data do atendimento *">
-          <Input
-            type="date"
+          <DatePicker
             value={form.date}
-            onChange={(event) => update("date", event.target.value)}
+            onChange={(value) => update("date", value)}
             className="rounded-xl border-pink-200 bg-[var(--input-background)]"
             required
           />
         </Field>
         <Field label="Horário">
-          <Input
-            type="time"
+          <TimePicker
             value={form.time}
-            onChange={(event) => update("time", event.target.value)}
+            onChange={(value) => update("time", value)}
             className="rounded-xl border-pink-200 bg-[var(--input-background)]"
           />
         </Field>

@@ -1,8 +1,19 @@
-import { useEffect, useMemo, useState, type ElementType } from "react";
+import { useEffect, useMemo, useRef, useState, type ElementType } from "react";
 import {
-  Search, Filter, Eye, Send, CheckCircle,
-  Clock, Heart, Phone, Mail, MapPin,
-  Bell, User, LogOut, Calendar,
+  Search,
+  Filter,
+  Eye,
+  Send,
+  CheckCircle,
+  Clock,
+  Heart,
+  Phone,
+  Mail,
+  MapPin,
+  Bell,
+  User,
+  LogOut,
+  Calendar,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -50,7 +61,12 @@ import {
   ForwardPatientModal,
   type ForwardPayload,
 } from "./user-area/patient/forward-patient-modal";
-import { formatDateBR } from "./user-area/patient/patient-utils";
+import {
+  formatDateBR,
+  formatDateTimeBR,
+  notificationTypeBadgeClass,
+  notificationTypeLabel,
+} from "./user-area/patient/patient-utils";
 import type {
   VolunteerAgendaItem,
   VolunteerHourEntry,
@@ -77,13 +93,19 @@ const statusConfig: Record<
   },
 };
 
-const priorityConfig: Record<PatientPriority, { className: string; label: string }> = {
+const priorityConfig: Record<
+  PatientPriority,
+  { className: string; label: string }
+> = {
   alta: { className: "bg-red-100 text-red-700 border-red-200", label: "alta" },
   media: {
     className: "bg-orange-100 text-orange-700 border-orange-200",
     label: "média",
   },
-  baixa: { className: "bg-gray-100 text-gray-700 border-gray-200", label: "baixa" },
+  baixa: {
+    className: "bg-gray-100 text-gray-700 border-gray-200",
+    label: "baixa",
+  },
 };
 
 function StatusBadge({ status }: { status: PatientWorkflowStatus }) {
@@ -120,13 +142,21 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
   const [activeTab, setActiveTab] = useState<VolunteerAreaTab>("patients");
   const [isHoursModalOpen, setIsHoursModalOpen] = useState(false);
   const [historyPatientId, setHistoryPatientId] = useState<string | null>(null);
-  const [forwardingPatientId, setForwardingPatientId] = useState<string | null>(null);
-  const [volunteerHours, setVolunteerHours] = useState<VolunteerHourEntry[]>([]);
-  const [volunteerAgenda, setVolunteerAgenda] = useState<VolunteerAgendaItem[]>([]);
+  const [forwardingPatientId, setForwardingPatientId] = useState<string | null>(
+    null,
+  );
+  const [volunteerHours, setVolunteerHours] = useState<VolunteerHourEntry[]>(
+    [],
+  );
+  const [volunteerAgenda, setVolunteerAgenda] = useState<VolunteerAgendaItem[]>(
+    [],
+  );
   const [hasLoadedPatients, setHasLoadedPatients] = useState(false);
   const [hasLoadedAppointments, setHasLoadedAppointments] = useState(false);
   const [hasLoadedNotifications, setHasLoadedNotifications] = useState(false);
   const [hasLoadedVolunteerHours, setHasLoadedVolunteerHours] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -139,19 +169,28 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
       loadVolunteerHours(),
       loadVolunteerAgenda(),
     ])
-      .then(([patients, loadedAppointments, loadedNotifications, loadedSectors, hours, agenda]) => {
-        if (!isMounted) return;
-        setPatientList(patients);
-        setAppointments(loadedAppointments);
-        setNotifications(loadedNotifications);
-        setSectors(loadedSectors);
-        setVolunteerHours(hours);
-        setVolunteerAgenda(agenda);
-        setHasLoadedPatients(true);
-        setHasLoadedAppointments(true);
-        setHasLoadedNotifications(true);
-        setHasLoadedVolunteerHours(true);
-      })
+      .then(
+        ([
+          patients,
+          loadedAppointments,
+          loadedNotifications,
+          loadedSectors,
+          hours,
+          agenda,
+        ]) => {
+          if (!isMounted) return;
+          setPatientList(patients);
+          setAppointments(loadedAppointments);
+          setNotifications(loadedNotifications);
+          setSectors(loadedSectors);
+          setVolunteerHours(hours);
+          setVolunteerAgenda(agenda);
+          setHasLoadedPatients(true);
+          setHasLoadedAppointments(true);
+          setHasLoadedNotifications(true);
+          setHasLoadedVolunteerHours(true);
+        },
+      )
       .catch((error) => {
         console.error("Falha ao carregar área da voluntária", error);
       });
@@ -189,10 +228,48 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
     });
   }, [volunteerHours, hasLoadedVolunteerHours]);
 
-  const pendingCount = patientList.filter((p) => p.status === "pendente").length;
-  const forwardedCount = patientList.filter((p) => p.status === "encaminhado").length;
-  const completedCount = patientList.filter((p) => p.status === "concluido").length;
-  const totalHours = volunteerHours.reduce((sum, entry) => sum + entry.hours, 0);
+  useEffect(() => {
+    if (!isNotificationsOpen) return;
+
+    function handleClickOutside(event: MouseEvent) {
+      if (!notificationsRef.current) return;
+      const target = event.target;
+      if (
+        target instanceof Node &&
+        !notificationsRef.current.contains(target)
+      ) {
+        setIsNotificationsOpen(false);
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsNotificationsOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isNotificationsOpen]);
+
+  const pendingCount = patientList.filter(
+    (p) => p.status === "pendente",
+  ).length;
+  const forwardedCount = patientList.filter(
+    (p) => p.status === "encaminhado",
+  ).length;
+  const completedCount = patientList.filter(
+    (p) => p.status === "concluido",
+  ).length;
+  const totalHours = volunteerHours.reduce(
+    (sum, entry) => sum + entry.hours,
+    0,
+  );
 
   const filtered = patientList.filter((p) => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase());
@@ -219,6 +296,43 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
     });
     return map;
   }, [appointments]);
+
+  const volunteerNotifications = useMemo(
+    () =>
+      notifications
+        .filter(
+          (item) =>
+            item.recipientRole === "voluntaria" &&
+            (!item.recipientId || item.recipientId === DEMO_VOLUNTEER_ID),
+        )
+        .sort((a, b) => b.date.localeCompare(a.date)),
+    [notifications],
+  );
+
+  const unreadCount = useMemo(
+    () => volunteerNotifications.filter((item) => !item.read).length,
+    [volunteerNotifications],
+  );
+
+  function handleMarkNotificationAsRead(notificationId: string) {
+    setNotifications((current) =>
+      current.map((item) =>
+        item.id === notificationId ? { ...item, read: true } : item,
+      ),
+    );
+  }
+
+  function handleMarkAllAsRead() {
+    if (unreadCount === 0) return;
+    setNotifications((current) =>
+      current.map((item) => {
+        const isTarget =
+          item.recipientRole === "voluntaria" &&
+          (!item.recipientId || item.recipientId === DEMO_VOLUNTEER_ID);
+        return isTarget ? { ...item, read: true } : item;
+      }),
+    );
+  }
 
   function handleStartForward(id: string) {
     setForwardingPatientId(id);
@@ -306,7 +420,6 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--background)] text-[var(--foreground)]">
-
       {/* ── Navbar ── */}
       <nav className="flex items-center justify-between px-6 py-3 bg-white border-b border-[var(--border)]">
         <div className="flex items-center gap-3">
@@ -327,9 +440,103 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="relative cursor-pointer">
-            <Bell size={20} className="text-[var(--muted-foreground)]" />
-            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[var(--primary)]" />
+          <div className="relative" ref={notificationsRef}>
+            <button
+              type="button"
+              onClick={() => setIsNotificationsOpen((current) => !current)}
+              className="relative cursor-pointer rounded-full p-1.5 transition-colors hover:bg-pink-50"
+              aria-label="Abrir notificações"
+              aria-haspopup="menu"
+              aria-expanded={isNotificationsOpen}
+            >
+              <Bell size={20} className="text-[var(--muted-foreground)]" />
+              {unreadCount > 0 && (
+                <>
+                  <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-[var(--primary)]" />
+                  <span className="absolute -right-2 -top-2 min-w-[1.1rem] rounded-full bg-pink-600 px-1 text-center text-[10px] font-semibold text-white">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                </>
+              )}
+            </button>
+
+            {isNotificationsOpen && (
+              <div
+                className="absolute right-0 z-40 mt-2 w-96 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-pink-100 bg-white shadow-lg shadow-pink-100/40"
+                role="menu"
+              >
+                <div className="flex items-center justify-between border-b border-pink-100 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--primary)]">
+                      Notificações
+                    </p>
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      {unreadCount > 0
+                        ? `${unreadCount} não ${unreadCount === 1 ? "lida" : "lidas"}`
+                        : "Sem pendências"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleMarkAllAsRead}
+                    disabled={unreadCount === 0}
+                    className="rounded-full border border-pink-200 px-3 py-1 text-xs font-semibold text-pink-700 transition-colors hover:bg-pink-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Marcar tudo
+                  </button>
+                </div>
+
+                {volunteerNotifications.length === 0 ? (
+                  <div className="px-4 py-5 text-sm text-[var(--muted-foreground)]">
+                    Você ainda não tem notificações.
+                  </div>
+                ) : (
+                  <ul className="pretty-scrollbar max-h-80 space-y-2 overflow-y-auto p-3">
+                    {volunteerNotifications.map((item) => (
+                      <li
+                        key={item.id}
+                        className={`rounded-xl border p-3 ${
+                          item.read
+                            ? "border-gray-100 bg-gray-50/80"
+                            : "border-pink-200 bg-pink-50/70"
+                        }`}
+                      >
+                        <div className="mb-1.5 flex items-start justify-between gap-2">
+                          <p className="text-sm font-medium text-[var(--foreground)]">
+                            {item.title}
+                          </p>
+                          <Badge
+                            variant="outline"
+                            className={notificationTypeBadgeClass[item.type]}
+                          >
+                            {notificationTypeLabel[item.type]}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-[var(--muted-foreground)]">
+                          {item.message}
+                        </p>
+                        <div className="mt-2 flex items-center justify-between">
+                          <span className="text-[11px] text-[var(--muted-foreground)]">
+                            {formatDateTimeBR(item.date)}
+                          </span>
+                          {!item.read && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleMarkNotificationAsRead(item.id)
+                              }
+                              className="text-xs font-semibold text-pink-700 hover:text-pink-800"
+                            >
+                              Marcar como lida
+                            </button>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
             <User size={17} />
@@ -347,7 +554,6 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
 
       {/* ── Main ── */}
       <main className="flex-1 w-full max-w-[1200px] mx-auto px-4 py-8">
-
         {/* Page header */}
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-8">
           <div>
@@ -379,12 +585,15 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
                   Registro de atividades de voluntariado
                 </h2>
                 <p className="text-sm text-[var(--muted-foreground)]">
-                  Consulte a agenda e registre as horas realizadas pela voluntária.
+                  Consulte a agenda e registre as horas realizadas pela
+                  voluntária.
                 </p>
               </div>
               <div className="flex items-center gap-3 rounded-2xl bg-pink-50 px-4 py-3 text-sm">
                 <div>
-                  <p className="text-[var(--muted-foreground)]">Horas acumuladas</p>
+                  <p className="text-[var(--muted-foreground)]">
+                    Horas acumuladas
+                  </p>
                   <p className="text-lg font-semibold text-[var(--primary)]">
                     {totalHours.toFixed(1)}h
                   </p>
@@ -407,8 +616,12 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
                     <Clock size={18} className="text-yellow-600" />
                   </div>
                 </div>
-                <p className="text-2xl font-semibold text-yellow-600">{pendingCount}</p>
-                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">Aguardando análise</p>
+                <p className="text-2xl font-semibold text-yellow-600">
+                  {pendingCount}
+                </p>
+                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                  Aguardando análise
+                </p>
               </div>
 
               <div className="bg-white rounded-xl border border-[var(--border)] p-5">
@@ -418,8 +631,12 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
                     <Send size={18} className="text-blue-600" />
                   </div>
                 </div>
-                <p className="text-2xl font-semibold text-blue-600">{forwardedCount}</p>
-                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">Em atendimento</p>
+                <p className="text-2xl font-semibold text-blue-600">
+                  {forwardedCount}
+                </p>
+                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                  Em atendimento
+                </p>
               </div>
 
               <div className="bg-white rounded-xl border border-[var(--border)] p-5">
@@ -429,8 +646,12 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
                     <CheckCircle size={18} className="text-green-600" />
                   </div>
                 </div>
-                <p className="text-2xl font-semibold text-green-600">{completedCount}</p>
-                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">Finalizados</p>
+                <p className="text-2xl font-semibold text-green-600">
+                  {completedCount}
+                </p>
+                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                  Finalizados
+                </p>
               </div>
             </div>
 
@@ -486,7 +707,8 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
                   </p>
                 )}
                 {filtered.map((patient) => {
-                  const appointmentCount = appointmentsByPatient.get(patient.id) ?? 0;
+                  const appointmentCount =
+                    appointmentsByPatient.get(patient.id) ?? 0;
                   return (
                     <div
                       key={patient.id}
@@ -495,19 +717,24 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center flex-wrap gap-2 mb-1.5">
-                            <span className="font-medium text-sm">{patient.name}</span>
+                            <span className="font-medium text-sm">
+                              {patient.name}
+                            </span>
                             <StatusBadge status={patient.status} />
                             <PriorityBadge priority={patient.priority} />
                             <span className="rounded-full bg-pink-100 px-2 py-0.5 text-[11px] font-medium text-pink-700">
                               {appointmentCount}{" "}
-                              {appointmentCount === 1 ? "atendimento" : "atendimentos"}
+                              {appointmentCount === 1
+                                ? "atendimento"
+                                : "atendimentos"}
                             </span>
                           </div>
                           <p className="text-sm text-[var(--muted-foreground)] mb-1">
                             {patient.symptoms}
                           </p>
                           <p className="text-xs text-[var(--muted-foreground)]">
-                            Data de cadastro: {formatDateBR(patient.registrationDate)}
+                            Data de cadastro:{" "}
+                            {formatDateBR(patient.registrationDate)}
                           </p>
                         </div>
 
@@ -562,11 +789,14 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <Heart size={16} className="text-[var(--primary)]" />
-                <span className="font-semibold text-sm text-[var(--primary)]">Sobre Nós</span>
+                <span className="font-semibold text-sm text-[var(--primary)]">
+                  Sobre Nós
+                </span>
               </div>
               <p className="text-sm text-[var(--muted-foreground)] leading-relaxed">
-                A Rede Feminina de Combate ao Câncer de Mama de Itapema trabalha para apoiar
-                pacientes e promover a conscientização sobre o câncer de mama.
+                A Rede Feminina de Combate ao Câncer de Mama de Itapema trabalha
+                para apoiar pacientes e promover a conscientização sobre o
+                câncer de mama.
               </p>
             </div>
 
@@ -603,7 +833,9 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
                     key={label}
                     href="#"
                     className={`text-sm no-underline hover:text-[var(--primary)] transition-colors ${
-                      highlight ? "text-[var(--primary)]" : "text-[var(--muted-foreground)]"
+                      highlight
+                        ? "text-[var(--primary)]"
+                        : "text-[var(--muted-foreground)]"
                     }`}
                   >
                     {label}
@@ -614,7 +846,8 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
           </div>
 
           <div className="border-t border-[var(--border)] pt-4 text-center text-xs text-[var(--muted-foreground)]">
-            © 2025 Cuidado Floral - Rede Feminina de Combate ao Câncer de Mama. Todos os direitos reservados.
+            © 2025 Cuidado Floral - Rede Feminina de Combate ao Câncer de Mama.
+            Todos os direitos reservados.
           </div>
         </div>
       </footer>
@@ -640,9 +873,7 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
 
       <ForwardPatientModal
         open={forwardingPatientId !== null}
-        patient={
-          patientList.find((p) => p.id === forwardingPatientId) ?? null
-        }
+        patient={patientList.find((p) => p.id === forwardingPatientId) ?? null}
         sectors={sectors}
         onClose={() => setForwardingPatientId(null)}
         onConfirm={handleConfirmForward}

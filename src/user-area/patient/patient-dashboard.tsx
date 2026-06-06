@@ -22,8 +22,16 @@ import { PatientAppointmentsTimeline } from "./patient-appointments-timeline";
 import { formatDateBR } from "./patient-utils";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
+import { DatePicker, TimePicker } from "../../ui/date-time-picker";
 import { Dialog } from "../../ui/dialog";
 import { Input } from "../../ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../ui/select";
 import { Textarea } from "../../ui/textarea";
 
 function normalizeProfileDate(value: string) {
@@ -438,10 +446,9 @@ function PatientRequestAppointmentModal({
             <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
               Data
             </label>
-            <Input
-              type="date"
+            <DatePicker
               value={date}
-              onChange={(event) => setDate(event.target.value)}
+              onChange={setDate}
               required
               className="text-sm"
             />
@@ -450,10 +457,9 @@ function PatientRequestAppointmentModal({
             <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
               Horário
             </label>
-            <Input
-              type="time"
+            <TimePicker
               value={time}
-              onChange={(event) => setTime(event.target.value)}
+              onChange={setTime}
               required
               className="text-sm"
             />
@@ -464,18 +470,24 @@ function PatientRequestAppointmentModal({
           <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
             Tipo de consulta
           </label>
-          <select
+          <Select
             value={consultationType}
-            onChange={(event) => setConsultationType(event.target.value)}
-            className="w-full rounded-2xl border border-input bg-input-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50"
+            onValueChange={setConsultationType}
           >
-            <option>Acolhimento inicial</option>
-            <option>Consulta de acompanhamento</option>
-            <option>Sessão de fisioterapia</option>
-            <option>Sessão de psicologia</option>
-            <option>Consulta de retorno</option>
-            <option>Outra</option>
-          </select>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Acolhimento inicial">Acolhimento inicial</SelectItem>
+              <SelectItem value="Consulta de acompanhamento">
+                Consulta de acompanhamento
+              </SelectItem>
+              <SelectItem value="Sessão de fisioterapia">Sessão de fisioterapia</SelectItem>
+              <SelectItem value="Sessão de psicologia">Sessão de psicologia</SelectItem>
+              <SelectItem value="Consulta de retorno">Consulta de retorno</SelectItem>
+              <SelectItem value="Outra">Outra</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div>
@@ -658,10 +670,9 @@ function PatientProfileModal({
           <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
             Data de nascimento
           </label>
-          <Input
-            type="date"
+          <DatePicker
             value={birthDate}
-            onChange={(event) => setBirthDate(event.target.value)}
+            onChange={setBirthDate}
             required
             className="text-sm"
           />

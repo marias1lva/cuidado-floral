@@ -2,8 +2,10 @@ import { useState } from "react";
 import { Copy, Check, MessageCircle, ChevronLeft } from "lucide-react";
 import type { FinancialDonationForm } from "./donation-types";
 import { formatPhoneBR } from "./phone-format";
+import { CurrencyInput } from "../ui/currency-input";
+import { Checkbox } from "../ui/checkbox";
 
-// ⚠️  Substitua pelos dados reais da ONG antes de entregar
+//substituir por dados reais
 const PIX_KEY = "ong@redefeminina.org.br";
 const WHATSAPP_NUMBER = "5547999999999"; // DDI + DDD + número
 const WHATSAPP_MESSAGE = "Quero%20fazer%20uma%20doa%C3%A7%C3%A3o";
@@ -13,19 +15,29 @@ interface FinancialDonationProps {
   onConfirm: (form: FinancialDonationForm) => void;
 }
 
-export function FinancialDonation({ onBack, onConfirm }: FinancialDonationProps) {
+export function FinancialDonation({
+  onBack,
+  onConfirm,
+}: FinancialDonationProps) {
   const [copied, setCopied] = useState(false);
   const [form, setForm] = useState<FinancialDonationForm>({
     nome: "",
     telefone: "",
     valorEstimado: "",
+    isThirdParty: false,
   });
-  const [errors, setErrors] = useState<Partial<FinancialDonationForm>>({});
+  const [errors, setErrors] = useState<
+    Partial<Record<keyof FinancialDonationForm, string>>
+  >({});
 
   function handleChange(field: keyof FinancialDonationForm, value: string) {
     const next = field === "telefone" ? formatPhoneBR(value) : value;
     setForm((prev) => ({ ...prev, [field]: next }));
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: "" }));
+  }
+
+  function handleThirdPartyChange(checked: boolean) {
+    setForm((prev) => ({ ...prev, isThirdParty: checked }));
   }
 
   function handleCopyPix() {
@@ -36,7 +48,7 @@ export function FinancialDonation({ onBack, onConfirm }: FinancialDonationProps)
   }
 
   function validate(): boolean {
-    const newErrors: Partial<FinancialDonationForm> = {};
+    const newErrors: Partial<Record<keyof FinancialDonationForm, string>> = {};
     if (!form.nome.trim()) newErrors.nome = "Nome é obrigatório";
     if (!form.telefone.trim()) newErrors.telefone = "Telefone é obrigatório";
     setErrors(newErrors);
@@ -64,7 +76,9 @@ export function FinancialDonation({ onBack, onConfirm }: FinancialDonationProps)
       </div>
 
       <div>
-        <h2 className="text-xl font-semibold text-[var(--primary)]">Doação Financeira</h2>
+        <h2 className="text-xl font-semibold text-[var(--primary)]">
+          Doação Financeira
+        </h2>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
           Ajude a ONG via PIX ou entre em contato pelo WhatsApp.
         </p>
@@ -76,7 +90,8 @@ export function FinancialDonation({ onBack, onConfirm }: FinancialDonationProps)
         <div className="flex justify-center">
           <div className="flex h-36 w-36 items-center justify-center rounded-xl border-2 border-dashed border-pink-300 bg-white text-center">
             <p className="text-xs text-pink-400 px-2 leading-relaxed">
-              QR Code PIX<br />
+              QR Code PIX
+              <br />
               <span className="text-gray-400">(inserir imagem)</span>
             </p>
           </div>
@@ -86,7 +101,9 @@ export function FinancialDonation({ onBack, onConfirm }: FinancialDonationProps)
         <div>
           <p className="text-xs font-medium text-gray-500 mb-1.5">Chave PIX</p>
           <div className="flex items-center gap-2 rounded-xl border border-pink-200 bg-white px-3.5 py-2.5">
-            <span className="flex-1 text-sm font-mono text-gray-700 truncate">{PIX_KEY}</span>
+            <span className="flex-1 text-sm font-mono text-gray-700 truncate">
+              {PIX_KEY}
+            </span>
             <button
               type="button"
               onClick={handleCopyPix}
@@ -121,46 +138,78 @@ export function FinancialDonation({ onBack, onConfirm }: FinancialDonationProps)
 
       {/* Mini formulário */}
       <div className="space-y-3">
-        <p className="text-sm font-medium text-gray-700">Seus dados (para confirmarmos a doação)</p>
+        <p className="text-sm font-medium text-gray-700">
+          {form.isThirdParty
+            ? "Dados da pessoa terceira (para confirmarmos a doação)"
+            : "Seus dados (para confirmarmos a doação)"}
+        </p>
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">Nome *</label>
+          <label className="mb-1 block text-xs font-medium text-gray-600">
+            {form.isThirdParty ? "Nome do terceiro *" : "Nome *"}
+          </label>
           <input
             type="text"
             value={form.nome}
             onChange={(e) => handleChange("nome", e.target.value)}
-            placeholder="Seu nome completo"
+            placeholder={
+              form.isThirdParty
+                ? "Nome completo do terceiro"
+                : "Seu nome completo"
+            }
             className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-pink-400 focus:ring-2 focus:ring-pink-100 ${
-              errors.nome ? "border-red-400 bg-red-50" : "border-gray-200 bg-white"
+              errors.nome
+                ? "border-red-400 bg-red-50"
+                : "border-gray-200 bg-white"
             }`}
           />
-          {errors.nome && <p className="mt-1 text-xs text-red-500">{errors.nome}</p>}
+          {errors.nome && (
+            <p className="mt-1 text-xs text-red-500">{errors.nome}</p>
+          )}
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">Telefone *</label>
+          <label className="mb-1 block text-xs font-medium text-gray-600">
+            {form.isThirdParty ? "Telefone do terceiro *" : "Telefone *"}
+          </label>
           <input
             type="tel"
             inputMode="tel"
             value={form.telefone}
             onChange={(e) => handleChange("telefone", e.target.value)}
-            placeholder="(47) 99999-9999"
+            placeholder={
+              form.isThirdParty ? "Telefone do terceiro" : "(47) 99999-9999"
+            }
             maxLength={15}
             className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-pink-400 focus:ring-2 focus:ring-pink-100 ${
-              errors.telefone ? "border-red-400 bg-red-50" : "border-gray-200 bg-white"
+              errors.telefone
+                ? "border-red-400 bg-red-50"
+                : "border-gray-200 bg-white"
             }`}
           />
-          {errors.telefone && <p className="mt-1 text-xs text-red-500">{errors.telefone}</p>}
+          {errors.telefone && (
+            <p className="mt-1 text-xs text-red-500">{errors.telefone}</p>
+          )}
         </div>
+
+        <label className="flex items-start gap-3 rounded-xl border border-pink-100 bg-pink-50/50 px-3.5 py-3 text-sm text-gray-700">
+          <Checkbox
+            checked={form.isThirdParty}
+            onChange={(event) => handleThirdPartyChange(event.target.checked)}
+            className="mt-0.5"
+          />
+          <span className="leading-relaxed">
+            Esta doação foi realizada por um terceiro usando este perfil.
+          </span>
+        </label>
 
         <div>
           <label className="mb-1 block text-xs font-medium text-gray-600">
             Valor estimado <span className="text-gray-400">(opcional)</span>
           </label>
-          <input
-            type="text"
+          <CurrencyInput
             value={form.valorEstimado}
-            onChange={(e) => handleChange("valorEstimado", e.target.value)}
+            onValueChange={(value) => handleChange("valorEstimado", value)}
             placeholder="R$ 0,00"
             className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
           />
