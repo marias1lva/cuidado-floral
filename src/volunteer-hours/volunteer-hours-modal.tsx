@@ -107,25 +107,18 @@ export function VolunteerHoursModal({
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
-    const { isValid, parsedHours } = validateForm();
-    if (!isValid) {
-      return;
-    }
-
     onSubmit({
-      id: Date.now(),
+      id: Math.floor(Math.random() * 2000000000), 
       volunteerId,
       volunteerName,
-      activityName: form.activityName.trim(),
+      activityName: form.activityName,
       category: form.category,
       date: form.date,
-      hours: parsedHours,
-      location: form.location.trim(),
-      notes: form.notes.trim(),
+      hours: Number(form.hours),
+      location: form.location,
+      notes: form.notes,
       createdAt: new Date().toISOString(),
     });
-
     handleClose();
   }
 
