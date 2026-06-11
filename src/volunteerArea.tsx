@@ -42,7 +42,6 @@ import {
 } from "./domain/patient-data";
 import { loadPatients, savePatients } from "./domain/patients-data";
 import { loadSectors } from "./domain/sectors-data";
-import { DEMO_VOLUNTEER_ID, DEMO_VOLUNTEER_NAME } from "./domain/storage";
 import {
   loadVolunteerAgenda,
   loadVolunteerHours,
@@ -71,6 +70,7 @@ import type {
   VolunteerAgendaItem,
   VolunteerHourEntry,
 } from "./volunteer-hours/types";
+import { getLoggedUser } from "./domain/auth";
 
 const statusConfig: Record<
   PatientWorkflowStatus,
@@ -133,6 +133,9 @@ interface VolunteerAreaProps {
 }
 
 export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
+  const loggedUser = getLoggedUser();
+  const volunteerId = loggedUser ? `vol-${loggedUser.sub}` : "";
+  const volunteerName = loggedUser ? loggedUser.name : "";
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [patientList, setPatientList] = useState<Patient[]>([]);
@@ -303,7 +306,7 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
         .filter(
           (item) =>
             item.recipientRole === "voluntaria" &&
-            (!item.recipientId || item.recipientId === DEMO_VOLUNTEER_ID),
+            (!item.recipientId || item.recipientId === volunteerId),
         )
         .sort((a, b) => b.date.localeCompare(a.date)),
     [notifications],
@@ -328,7 +331,7 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
       current.map((item) => {
         const isTarget =
           item.recipientRole === "voluntaria" &&
-          (!item.recipientId || item.recipientId === DEMO_VOLUNTEER_ID);
+          (!item.recipientId || item.recipientId === volunteerId);
         return isTarget ? { ...item, read: true } : item;
       }),
     );
@@ -357,7 +360,7 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
       patientId: patient.id,
       patientName: patient.name,
       date: today,
-      volunteerName: DEMO_VOLUNTEER_NAME,
+      volunteerName: volunteerName,
       status: "encaminhado",
       observacoes: `Encaminhamento para ${sector.name}.${
         observations ? ` ${observations}` : ""
@@ -540,7 +543,7 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
           </div>
           <div className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
             <User size={17} />
-            <span>{DEMO_VOLUNTEER_NAME}</span>
+            <span>{volunteerName}</span>
           </div>
           <button
             onClick={onLogout}
@@ -856,15 +859,15 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
         open={isHoursModalOpen}
         onClose={() => setIsHoursModalOpen(false)}
         onSubmit={handleRegisterHours}
-        volunteerName={DEMO_VOLUNTEER_NAME}
-        volunteerId={DEMO_VOLUNTEER_ID}
+        volunteerName={volunteerName}
+        volunteerId={volunteerId}
       />
 
       {historyPatient && (
         <PatientHistoryModal
           patient={historyPatient}
           appointments={historyAppointments}
-          volunteerName={DEMO_VOLUNTEER_NAME}
+          volunteerName={volunteerName}
           onClose={() => setHistoryPatientId(null)}
           onSave={handleSaveAppointment}
           onDelete={handleDeleteAppointment}

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Mail, Lock, User, Heart, Flower2, AlertCircle } from "lucide-react";
-import { loginWithDemoAccount } from "./domain/auth";
+import { Mail, Lock, User, Heart, Flower2, AlertCircle, FileText } from "lucide-react";
+import { loginWithDemoAccount, registerAccount } from "./domain/auth";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 
@@ -12,34 +12,44 @@ interface AuthScreenProps {
 
 export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
   const [activeTab, setActiveTab] = useState<"login" | "register">("login");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState(""); 
+  const [cpf, setCpf] = useState("");
   const [password, setPassword] = useState("");
+  const [selectedRole, setSelectedRole] = useState<UserRole>("paciente");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null); 
+    setIsSubmitting(true);
     
-    if (activeTab === "login") {
-      setIsSubmitting(true);
-      try {
+    try {
+      if (activeTab === "login") {
         const response = await loginWithDemoAccount(
           email.trim().toLowerCase(),
           password,
         );
         onLoginSuccess(response.role);
-      } catch (loginError) {
-        setError(
-          loginError instanceof Error
-            ? loginError.message
-            : "E-mail ou senha incorretos. Por favor, tente novamente.",
+      } else {
+        const response = await registerAccount(
+          name.trim(), 
+          email.trim().toLowerCase(),
+          password,
+          cpf.replace(/\D/g, ""), 
+          selectedRole 
         );
-      } finally {
-        setIsSubmitting(false);
+        onLoginSuccess(response.role);
       }
-    } else {
-      alert("Funcionalidade de cadastro não implementada na demo.");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Erro inesperado de comunicação. Tente novamente."
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -60,11 +70,6 @@ export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
         <div className="text-center mb-8">
           <h2 className="text-[#E91E63] font-semibold text-lg mb-1">Bem-vinda ao Sistema</h2>
           <p className="text-sm text-[#8B7B7D]">Faça login ou cadastre-se para continuar</p>
-          {activeTab === "login" && (
-            <p className="mt-2 text-xs text-[#8B7B7D]">
-              Acessos demo: admin, voluntario, paciente ou doador com senha 123.
-            </p>
-          )}
         </div>
 
         <div className="flex bg-[#F5E6E8] p-1.5 rounded-full mb-8">
@@ -94,7 +99,6 @@ export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
           </button>
         </div>
 
-        {}
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 text-red-600 text-sm animate-in fade-in zoom-in duration-300">
             <AlertCircle size={18} className="shrink-0" />
@@ -104,16 +108,35 @@ export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {activeTab === "register" && (
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-black ml-1">Nome Completo</label>
-              <div className="relative">
-                <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#E91E63]" />
-                <Input 
-                  placeholder="Seu nome completo" 
-                  className="pl-12 h-14 rounded-full border-pink-100 bg-[#FFF9FB] text-sm"
-                />
+            <>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-black ml-1">Nome Completo</label>
+                <div className="relative">
+                  <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#E91E63]" />
+                  <Input 
+                    placeholder="Seu nome completo" 
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="pl-12 h-14 rounded-full border-pink-100 bg-[#FFF9FB] text-sm"
+                    required
+                  />
+                </div>
               </div>
-            </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-black ml-1">CPF</label>
+                <div className="relative">
+                  <FileText size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#E91E63]" />
+                  <Input 
+                    placeholder="000.000.000-00" 
+                    value={cpf}
+                    onChange={(e) => setCpf(e.target.value)}
+                    className="pl-12 h-14 rounded-full border-pink-100 bg-[#FFF9FB] text-sm"
+                    required
+                  />
+                </div>
+              </div>
+            </>
           )}
 
           <div className="space-y-2">
@@ -144,13 +167,6 @@ export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
                 required
               />
             </div>
-            {activeTab === "login" && (
-              <div className="flex justify-end">
-                <button type="button" className="text-xs font-semibold text-[#E91E63] hover:underline">
-                  Esqueci minha senha
-                </button>
-              </div>
-            )}
           </div>
 
           {activeTab === "register" && (
@@ -158,17 +174,24 @@ export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
               <p className="text-sm font-bold text-black ml-1">Cadastrar-se como:</p>
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  { label: "Paciente", icon: User },
-                  { label: "Doador", icon: Heart },
-                  { label: "Voluntária", icon: Flower2 }
+                  { id: "paciente", label: "Paciente", icon: User },
+                  { id: "doador", label: "Doador", icon: Heart },
+                  { id: "voluntaria", label: "Voluntária", icon: Flower2 }
                 ].map((perfil) => (
                   <button
-                    key={perfil.label}
+                    key={perfil.id}
                     type="button"
-                    className="flex flex-col items-center justify-center p-3 rounded-2xl border border-pink-100 bg-[#FFF9FB] hover:border-[#E91E63] transition-colors group"
+                    onClick={() => setSelectedRole(perfil.id as UserRole)}
+                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition-colors group ${
+                      selectedRole === perfil.id
+                        ? "border-[#E91E63] bg-pink-50"
+                        : "border-pink-100 bg-[#FFF9FB] hover:border-[#E91E63]"
+                    }`}
                   >
-                    <perfil.icon size={20} className="text-[#E91E63] mb-1" />
-                    <span className="text-[10px] font-bold text-[#8B7B7D] group-hover:text-[#E91E63]">{perfil.label}</span>
+                    <perfil.icon size={20} className={`${selectedRole === perfil.id ? "text-[#E91E63]" : "text-[#8B7B7D] group-hover:text-[#E91E63]"} mb-1`} />
+                    <span className={`text-[10px] font-bold ${selectedRole === perfil.id ? "text-[#E91E63]" : "text-[#8B7B7D] group-hover:text-[#E91E63]"}`}>
+                      {perfil.label}
+                    </span>
                   </button>
                 ))}
               </div>

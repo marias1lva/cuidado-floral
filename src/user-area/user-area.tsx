@@ -3,12 +3,7 @@ import { Heart, LogOut, User, Bell, Phone, Mail, MapPin } from "lucide-react";
 import { DonationModal } from "../donation-page/donation-modal";
 import { DonorDashboard } from "./donor/donor-dashboard";
 import { PatientDashboard } from "./patient/patient-dashboard";
-import {
-  DEMO_DONOR_ID,
-  DEMO_DONOR_NAME,
-  DEMO_PATIENT_ID,
-  DEMO_PATIENT_NAME,
-} from "../domain/storage";
+import { getLoggedUser } from "../domain/auth";
 import { loadDonations, saveDonations } from "../domain/donor-data";
 import { loadNotifications, saveNotifications } from "../domain/patient-data";
 import type { AppNotification, Donation } from "../domain/types";
@@ -33,7 +28,7 @@ const roleContent: Record<
   doador: {
     title: "Histórico de Doações",
     subtitle: "Acompanhe suas contribuições e faça novas doações",
-    userName: DEMO_DONOR_NAME,
+    userName: "",
   },
 };
 
@@ -44,17 +39,21 @@ const patientRoleContent = {
 };
 
 export function UserArea({ role, onLogout }: UserAreaProps) {
-  const [patientName, setPatientName] = useState(DEMO_PATIENT_NAME);
+  const loggedUser = getLoggedUser();
+  const userId = loggedUser ? `${role === "doador" ? "doa" : "pat"}-${loggedUser.sub}` : "";
+  const userName = loggedUser ? loggedUser.name : "";
   const content =
     role === "paciente"
-      ? { ...patientRoleContent, userName: patientName }
-      : roleContent[role];
+      ? { ...patientRoleContent, userName: userName }
+      : { ...roleContent[role], userName: userName }; 
+
   const [isDonationModalOpen, setIsDonationModalOpen] = useState(false);
   const [donations, setDonations] = useState<Donation[]>([]);
   const [hasLoadedDonations, setHasLoadedDonations] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [hasLoadedNotifications, setHasLoadedNotifications] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [patientName, setPatientName] = useState(userName); 
   const notificationsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -137,26 +136,19 @@ export function UserArea({ role, onLogout }: UserAreaProps) {
   }, [isNotificationsOpen]);
 
   const donorDonations = useMemo(
-    () => donations.filter((d) => d.donorId === DEMO_DONOR_ID),
-    [donations],
+    () => donations.filter((d) => d.donorId === userId),
+    [donations, userId],
   );
 
   const userNotifications = useMemo(() => {
-    const byRole =
-      role === "paciente"
-        ? notifications.filter(
-            (item) =>
-              item.recipientRole === "paciente" &&
-              (!item.recipientId || item.recipientId === DEMO_PATIENT_ID),
-          )
-        : notifications.filter(
-            (item) =>
-              item.recipientRole === "doador" &&
-              (!item.recipientId || item.recipientId === DEMO_DONOR_ID),
-          );
+    const byRole = notifications.filter(
+      (item) =>
+        item.recipientRole === role &&
+        (!item.recipientId || item.recipientId === userId),
+    );
 
     return byRole.sort((a, b) => b.date.localeCompare(a.date));
-  }, [notifications, role]);
+  }, [notifications, role, userId]);
 
   const unreadCount = useMemo(
     () => userNotifications.filter((item) => !item.read).length,
@@ -164,7 +156,12 @@ export function UserArea({ role, onLogout }: UserAreaProps) {
   );
 
   function handleCreateDonation(donation: Donation) {
-    setDonations((current) => [donation, ...current]);
+    const newDonation: Donation = {
+      ...donation,
+      donorId: userId,
+      donorName: userName,
+    };
+    setDonations((current) => [newDonation, ...current]);
   }
 
   function handleMarkNotificationAsRead(notificationId: string) {
@@ -177,15 +174,12 @@ export function UserArea({ role, onLogout }: UserAreaProps) {
 
   function handleMarkAllAsRead() {
     if (unreadCount === 0) return;
-    const targetRole = role === "paciente" ? "paciente" : "doador";
-    const targetRecipientId =
-      role === "paciente" ? DEMO_PATIENT_ID : DEMO_DONOR_ID;
 
     setNotifications((current) =>
       current.map((item) => {
         const isTarget =
-          item.recipientRole === targetRole &&
-          (!item.recipientId || item.recipientId === targetRecipientId);
+          item.recipientRole === role &&
+          (!item.recipientId || item.recipientId === userId);
         return isTarget ? { ...item, read: true } : item;
       }),
     );
@@ -313,7 +307,7 @@ export function UserArea({ role, onLogout }: UserAreaProps) {
 
           <div className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
             <User size={17} />
-            <span>{content.userName}</span>
+            <span>{role === "paciente" ? patientName : content.userName}</span>
           </div>
 
           <button

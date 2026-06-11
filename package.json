@@ -3,12 +3,11 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "scripts": {
+"scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:client": "vite",
-    "dev:server": "node --watch --import tsx server/index.ts",
+    "dev:server": "node --env-file=.env --watch --import tsx server/index.ts",
     "build": "vite build",
-    "seed": "node --import tsx server/seed.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -30,7 +29,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwind-merge": "^2.6.0",
-    "tsx": "^4.22.3"
+    "tsx": "^4.22.3",
+    "mysql2": "^3.14.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",

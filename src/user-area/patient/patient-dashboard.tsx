@@ -10,11 +10,6 @@ import {
   uploadAttachments,
 } from "../../domain/patient-data";
 import { loadUser, saveUser } from "../../domain/admin-data";
-import {
-  DEMO_PATIENT_ID,
-  DEMO_PATIENT_NAME,
-  DEMO_PATIENT_USER_ID,
-} from "../../domain/storage";
 import type { Appointment, AppNotification } from "../../domain/types";
 import type { ManagedUser } from "../../admin/types";
 import { PatientNotifications } from "./patient-notifications";
@@ -33,6 +28,7 @@ import {
   SelectValue,
 } from "../../ui/select";
 import { Textarea } from "../../ui/textarea";
+import { getLoggedUser } from "../../domain/auth";
 
 function normalizeProfileDate(value: string) {
   if (!value) {
@@ -56,10 +52,14 @@ interface PatientDashboardProps {
 export function PatientDashboard({
   onPatientNameChange,
 }: PatientDashboardProps) {
+  const loggedUser = getLoggedUser();
+  const patientId = loggedUser ? `pat-${loggedUser.sub}` : "";
+  const patientName = loggedUser ? loggedUser.name : "";
+  const patientUserId = loggedUser ? loggedUser.sub : 0;
+  
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [patientUser, setPatientUser] = useState<ManagedUser | null>(null);
-  const [patientName, setPatientName] = useState(DEMO_PATIENT_NAME);
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [hasLoadedAppointments, setHasLoadedAppointments] = useState(false);
@@ -88,11 +88,13 @@ export function PatientDashboard({
   useEffect(() => {
     let isMounted = true;
 
-    void loadUser(DEMO_PATIENT_USER_ID)
+    if (!patientUserId) return; 
+
+    void loadUser(patientUserId)
       .then((loadedUser) => {
         if (!isMounted) return;
         setPatientUser(loadedUser);
-        setPatientName(loadedUser.name);
+        if (onPatientNameChange) onPatientNameChange(loadedUser.name);
       })
       .catch((error) => {
         console.error("Falha ao carregar perfil da paciente", error);
@@ -101,21 +103,22 @@ export function PatientDashboard({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [patientUserId, onPatientNameChange]);
 
   const patientAppointments = useMemo(
-    () => appointments.filter((apt) => apt.patientId === DEMO_PATIENT_ID),
-    [appointments],
+    () => appointments.filter((apt) => apt.patientId === patientId),
+    [appointments, patientId],
   );
+  
   const patientNotifications = useMemo(
     () =>
       notifications.filter(
         (notification) =>
           notification.recipientRole === "paciente" &&
           (!notification.recipientId ||
-            notification.recipientId === DEMO_PATIENT_ID),
+            notification.recipientId === patientId),
       ),
-    [notifications],
+    [notifications, patientId],
   );
 
   useEffect(() => {
@@ -145,11 +148,10 @@ export function PatientDashboard({
 
   async function handleSaveProfile(updatedUser: ManagedUser) {
     setPatientUser(updatedUser);
-    setPatientName(updatedUser.name);
 
     setAppointments((current) =>
       current.map((appointment) =>
-        appointment.patientId === DEMO_PATIENT_ID
+        appointment.patientId === patientId
           ? { ...appointment, patientName: updatedUser.name }
           : appointment,
       ),
@@ -296,6 +298,7 @@ export function PatientDashboard({
         onClose={() => setIsRequestModalOpen(false)}
         onSave={handleSaveAppointment}
         patientName={patientName}
+        patientId={patientId}
       />
     </div>
   );
@@ -306,6 +309,7 @@ interface PatientRequestAppointmentModalProps {
   onClose: () => void;
   onSave: (appointment: Appointment) => void;
   patientName: string;
+  patientId: string;
 }
 
 function formatFileSize(bytes: number): string {
@@ -319,6 +323,7 @@ function PatientRequestAppointmentModal({
   onClose,
   onSave,
   patientName,
+  patientId,
 }: PatientRequestAppointmentModalProps) {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
@@ -392,8 +397,8 @@ function PatientRequestAppointmentModal({
       const now = new Date().toISOString();
       onSave({
         id: buildAppointmentId(),
-        patientId: DEMO_PATIENT_ID,
-        patientName: DEMO_PATIENT_NAME,
+        patientId: patientId,
+        patientName: patientName, 
         date,
         time,
         volunteerName: "Atendimento solicitado pela paciente",
