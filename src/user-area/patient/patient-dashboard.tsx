@@ -46,15 +46,17 @@ function normalizeProfileDate(value: string) {
 }
 
 interface PatientDashboardProps {
+  currentPatientName?: string;
   onPatientNameChange?: (name: string) => void;
 }
 
 export function PatientDashboard({
+  currentPatientName,
   onPatientNameChange,
 }: PatientDashboardProps) {
   const loggedUser = getLoggedUser();
   const patientId = loggedUser ? `pat-${loggedUser.sub}` : "";
-  const patientName = loggedUser ? loggedUser.name : "";
+  const sessionPatientName = loggedUser ? loggedUser.name : "";
   const patientUserId = loggedUser ? loggedUser.sub : 0;
   
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -64,6 +66,8 @@ export function PatientDashboard({
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [hasLoadedAppointments, setHasLoadedAppointments] = useState(false);
   const [hasLoadedNotifications, setHasLoadedNotifications] = useState(false);
+  const patientName =
+    patientUser?.name ?? currentPatientName ?? sessionPatientName;
 
   useEffect(() => {
     let isMounted = true;
