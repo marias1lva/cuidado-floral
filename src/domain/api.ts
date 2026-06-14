@@ -5,6 +5,11 @@ interface ApiErrorPayload {
   message?: string;
 }
 
+interface ApiRequestOptions {
+  omitAuth?: boolean;
+  suppressUnauthorizedHandler?: boolean;
+}
+
 export function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(TOKEN_STORAGE_KEY);
@@ -30,13 +35,14 @@ export function onUnauthorized(handler: UnauthorizedHandler | null): void {
 export async function apiRequest<T>(
   path: string,
   init?: RequestInit,
+  options: ApiRequestOptions = {},
 ): Promise<T> {
   const token = getAuthToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...((init?.headers as Record<string, string>) ?? {}),
   };
-  if (token) {
+  if (token && !options.omitAuth) {
     headers.Authorization = `Bearer ${token}`;
   }
 
@@ -45,7 +51,7 @@ export async function apiRequest<T>(
     headers,
   });
 
-  if (response.status === 401) {
+  if (response.status === 401 && !options.suppressUnauthorizedHandler) {
     setAuthToken(null);
     unauthorizedHandler?.();
     throw new Error("Sessão expirada. Faça login novamente.");
