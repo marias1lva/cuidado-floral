@@ -13,6 +13,7 @@ import {
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import type { Donation } from "../../domain/types";
+import { buildCsv, downloadCsv, type CsvColumn } from "../../domain/reports";
 import {
   donationItemLabel,
   donationKindLabel,
@@ -20,6 +21,7 @@ import {
   donationStatusLabel,
   donationSourceLabel,
   formatCurrencyBRL,
+  formatDateTimeBR,
 } from "./donor-utils";
 import { DonationReceiptModal } from "./donation-receipt-modal";
 
@@ -34,6 +36,38 @@ export function DonorHistory({ donations }: DonorHistoryProps) {
     () => [...donations].sort((a, b) => b.date.localeCompare(a.date)),
     [donations],
   );
+
+  const exportColumns: CsvColumn<Donation>[] = [
+    { header: "Data", value: (row) => formatDateTimeBR(row.date) },
+    { header: "Tipo", value: (row) => donationKindLabel[row.kind] },
+    { header: "Status", value: (row) => donationStatusLabel[row.status] },
+    {
+      header: "Origem",
+      value: (row) => donationSourceLabel[row.donorSource ?? "titular"],
+    },
+    { header: "Campanha", value: (row) => row.campaign ?? "" },
+    {
+      header: "Valor",
+      value: (row) =>
+        row.amount !== undefined ? row.amount.toFixed(2).replace(".", ",") : "",
+    },
+    {
+      header: "Item",
+      value: (row) => (row.itemType ? donationItemLabel[row.itemType] : ""),
+    },
+    { header: "Quantidade", value: (row) => row.quantity ?? "" },
+    { header: "Entrega", value: (row) => row.deliveryMethod ?? "" },
+    { header: "Protocolo", value: (row) => row.protocol ?? "" },
+    { header: "Observações", value: (row) => row.notes ?? "" },
+  ];
+
+  function handleExport() {
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadCsv(
+      `minhas-doacoes-${stamp}.csv`,
+      buildCsv(filtered, exportColumns),
+    );
+  }
 
   return (
     <section className="rounded-2xl border border-pink-100 bg-white p-7 shadow-sm shadow-pink-100/50">
@@ -50,6 +84,8 @@ export function DonorHistory({ donations }: DonorHistoryProps) {
         <Button
           variant="outline"
           className="rounded-full border-pink-300 px-5 text-[var(--foreground)] hover:bg-pink-50"
+          onClick={handleExport}
+          disabled={filtered.length === 0}
         >
           <Download className="mr-2 h-4 w-4" />
           Exportar

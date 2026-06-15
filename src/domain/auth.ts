@@ -40,6 +40,9 @@ export async function loginWithDemoAccount(
   const response = await apiRequest<LoginResponse>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
+  }, {
+    omitAuth: true,
+    suppressUnauthorizedHandler: true,
   });
   setAuthToken(response.token);
   return response;
@@ -59,6 +62,9 @@ export async function registerAccount(
   const response = await apiRequest<LoginResponse>("/auth/register", {
     method: "POST",
     body: JSON.stringify({ name, email, password, cpf, type: role }),
+  }, {
+    omitAuth: true,
+    suppressUnauthorizedHandler: true,
   });
   
   setAuthToken(response.token);

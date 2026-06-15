@@ -4,6 +4,7 @@ import { DonationModal } from "../donation-page/donation-modal";
 import { DonorDashboard } from "./donor/donor-dashboard";
 import { PatientDashboard } from "./patient/patient-dashboard";
 import { getLoggedUser } from "../domain/auth";
+import { loadUser } from "../domain/admin-data";
 import { loadDonations, saveDonations } from "../domain/donor-data";
 import { loadNotifications, saveNotifications } from "../domain/patient-data";
 import type { AppNotification, Donation } from "../domain/types";
@@ -53,8 +54,45 @@ export function UserArea({ role, onLogout }: UserAreaProps) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [hasLoadedNotifications, setHasLoadedNotifications] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [patientName, setPatientName] = useState(userName); 
+  const [displayName, setDisplayName] = useState(userName);
   const notificationsRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!loggedUser?.sub) return;
+
+    let isMounted = true;
+
+    const refreshCurrentUser = async () => {
+      try {
+        const loadedUser = await loadUser(loggedUser.sub);
+        if (!isMounted) return;
+        setDisplayName(loadedUser.name);
+      } catch (error) {
+        console.error("Falha ao carregar perfil do usuário", error);
+      }
+    };
+
+    void refreshCurrentUser();
+
+    function handleFocus() {
+      void refreshCurrentUser();
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void refreshCurrentUser();
+      }
+    }
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loggedUser?.sub]);
 
   useEffect(() => {
     let isMounted = true;
@@ -159,7 +197,7 @@ export function UserArea({ role, onLogout }: UserAreaProps) {
     const newDonation: Donation = {
       ...donation,
       donorId: userId,
-      donorName: userName,
+      donorName: displayName,
     };
     setDonations((current) => [newDonation, ...current]);
   }
@@ -307,7 +345,7 @@ export function UserArea({ role, onLogout }: UserAreaProps) {
 
           <div className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
             <User size={17} />
-            <span>{role === "paciente" ? patientName : content.userName}</span>
+            <span>{displayName}</span>
           </div>
 
           <button
@@ -337,7 +375,10 @@ export function UserArea({ role, onLogout }: UserAreaProps) {
         </div>
 
         {role === "paciente" ? (
-          <PatientDashboard onPatientNameChange={setPatientName} />
+          <PatientDashboard
+            currentPatientName={displayName}
+            onPatientNameChange={setDisplayName}
+          />
         ) : (
           <DonorDashboard
             donations={donorDonations}
