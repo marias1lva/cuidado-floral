@@ -151,6 +151,8 @@ export function PatientHistoryForm({
           <DatePicker
             value={form.date}
             onChange={(value) => update("date", value)}
+            fromYear={new Date().getFullYear() - 2}
+            toYear={new Date().getFullYear() + 2}
             className="rounded-xl border-pink-200 bg-[var(--input-background)]"
             required
           />

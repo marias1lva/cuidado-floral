@@ -52,6 +52,16 @@ export function clearSession(): void {
   setAuthToken(null);
 }
 
+export function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ ok: true }> {
+  return apiRequest<{ ok: true }>("/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
 export async function registerAccount(
   name: string,
   email: string,

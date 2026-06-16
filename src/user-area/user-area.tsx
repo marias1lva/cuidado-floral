@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Heart, LogOut, User, Bell, Phone, Mail, MapPin } from "lucide-react";
 import { DonationModal } from "../donation-page/donation-modal";
+import { ChangePasswordButton } from "../change-password-button";
 import { DonorDashboard } from "./donor/donor-dashboard";
 import { PatientDashboard } from "./patient/patient-dashboard";
 import { getLoggedUser } from "../domain/auth";
@@ -41,12 +42,14 @@ const patientRoleContent = {
 
 export function UserArea({ role, onLogout }: UserAreaProps) {
   const loggedUser = getLoggedUser();
-  const userId = loggedUser ? `${role === "doador" ? "doa" : "pat"}-${loggedUser.sub}` : "";
+  const userId = loggedUser
+    ? `${role === "doador" ? "doa" : "pat"}-${loggedUser.sub}`
+    : "";
   const userName = loggedUser ? loggedUser.name : "";
   const content =
     role === "paciente"
       ? { ...patientRoleContent, userName: userName }
-      : { ...roleContent[role], userName: userName }; 
+      : { ...roleContent[role], userName: userName };
 
   const [isDonationModalOpen, setIsDonationModalOpen] = useState(false);
   const [donations, setDonations] = useState<Donation[]>([]);
@@ -348,6 +351,8 @@ export function UserArea({ role, onLogout }: UserAreaProps) {
             <span>{displayName}</span>
           </div>
 
+          <ChangePasswordButton />
+
           <button
             onClick={onLogout}
             className="flex items-center gap-1 text-sm text-[var(--primary)] bg-transparent border-0 cursor-pointer hover:opacity-75 transition-opacity"
@@ -419,30 +424,6 @@ export function UserArea({ role, onLogout }: UserAreaProps) {
                   <MapPin size={14} className="text-[var(--primary)]" />
                   Itapema, SC
                 </div>
-              </div>
-            </div>
-
-            <div>
-              <p className="mb-3 text-sm font-semibold">Links Úteis</p>
-              <div className="flex flex-col gap-2">
-                {[
-                  { label: "Sobre o Câncer de Mama", highlight: false },
-                  { label: "Como Ajudar", highlight: true },
-                  { label: "Política de Privacidade", highlight: false },
-                  { label: "Termos de Uso", highlight: false },
-                ].map(({ label, highlight }) => (
-                  <a
-                    key={label}
-                    href="#"
-                    className={`text-sm no-underline transition-colors hover:text-[var(--primary)] ${
-                      highlight
-                        ? "text-[var(--primary)]"
-                        : "text-[var(--muted-foreground)]"
-                    }`}
-                  >
-                    {label}
-                  </a>
-                ))}
               </div>
             </div>
           </div>
