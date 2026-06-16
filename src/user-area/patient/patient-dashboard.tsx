@@ -1,17 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bell, Calendar, FileText, Paperclip, Plus, Trash2, Heart } from "lucide-react";
+import {
+  Bell,
+  Calendar,
+  FileText,
+  Paperclip,
+  Plus,
+  Trash2,
+} from "lucide-react";
 
 import {
   buildAppointmentId,
   loadAppointments,
   loadNotifications,
+  loadPatientProfile,
   saveAppointments,
   saveNotifications,
+  savePatientProfile,
   uploadAttachments,
 } from "../../domain/patient-data";
-import { loadUser, saveUser } from "../../domain/admin-data";
-import type { Appointment, AppNotification } from "../../domain/types";
-import type { ManagedUser } from "../../admin/types";
+import type {
+  Appointment,
+  AppNotification,
+  PatientProfile,
+} from "../../domain/types";
 import { PatientNotifications } from "./patient-notifications";
 import { PatientAppointmentsTimeline } from "./patient-appointments-timeline";
 import { PatientNetworkRegistration } from "./patient-network-registration";
@@ -30,6 +41,8 @@ import {
 } from "../../ui/select";
 import { Textarea } from "../../ui/textarea";
 import { getLoggedUser } from "../../domain/auth";
+import { formatPhoneBR } from "../../donation-page/phone-format";
+import { formatCpf } from "../../lib/cpf-format";
 
 function normalizeProfileDate(value: string) {
   if (!value) {
@@ -59,17 +72,19 @@ export function PatientDashboard({
   const patientId = loggedUser ? `pat-${loggedUser.sub}` : "";
   const sessionPatientName = loggedUser ? loggedUser.name : "";
   const patientUserId = loggedUser ? loggedUser.sub : 0;
-  
+
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [patientUser, setPatientUser] = useState<ManagedUser | null>(null);
+  const [patientProfile, setPatientProfile] = useState<PatientProfile | null>(
+    null,
+  );
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isNetworkRegistrationOpen, setIsNetworkRegistrationOpen] = useState(false);
   const [hasLoadedAppointments, setHasLoadedAppointments] = useState(false);
   const [hasLoadedNotifications, setHasLoadedNotifications] = useState(false);
   const patientName =
-    patientUser?.name ?? currentPatientName ?? sessionPatientName;
+    patientProfile?.name ?? currentPatientName ?? sessionPatientName;
 
   useEffect(() => {
     let isMounted = true;
@@ -94,13 +109,13 @@ export function PatientDashboard({
   useEffect(() => {
     let isMounted = true;
 
-    if (!patientUserId) return; 
+    if (!patientUserId) return;
 
-    void loadUser(patientUserId)
-      .then((loadedUser) => {
+    void loadPatientProfile()
+      .then((loadedProfile) => {
         if (!isMounted) return;
-        setPatientUser(loadedUser);
-        if (onPatientNameChange) onPatientNameChange(loadedUser.name);
+        setPatientProfile(loadedProfile);
+        if (onPatientNameChange) onPatientNameChange(loadedProfile.name);
       })
       .catch((error) => {
         console.error("Falha ao carregar perfil da paciente", error);
@@ -115,14 +130,13 @@ export function PatientDashboard({
     () => appointments.filter((apt) => apt.patientId === patientId),
     [appointments, patientId],
   );
-  
+
   const patientNotifications = useMemo(
     () =>
       notifications.filter(
         (notification) =>
           notification.recipientRole === "paciente" &&
-          (!notification.recipientId ||
-            notification.recipientId === patientId),
+          (!notification.recipientId || notification.recipientId === patientId),
       ),
     [notifications, patientId],
   );
@@ -152,21 +166,22 @@ export function PatientDashboard({
     }
   }
 
-  async function handleSaveProfile(updatedUser: ManagedUser) {
-    setPatientUser(updatedUser);
+  async function handleSaveProfile(updatedProfile: PatientProfile) {
+    setPatientProfile(updatedProfile);
 
     setAppointments((current) =>
       current.map((appointment) =>
         appointment.patientId === patientId
-          ? { ...appointment, patientName: updatedUser.name }
+          ? { ...appointment, patientName: updatedProfile.name }
           : appointment,
       ),
     );
 
     try {
-      await saveUser(updatedUser);
+      const saved = await savePatientProfile(updatedProfile);
+      setPatientProfile(saved);
       if (onPatientNameChange) {
-        onPatientNameChange(updatedUser.name);
+        onPatientNameChange(saved.name);
       }
     } catch (error) {
       console.error("Falha ao salvar cadastro da paciente", error);
@@ -314,7 +329,7 @@ export function PatientDashboard({
       <PatientProfileModal
         open={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
-        patientUser={patientUser}
+        profile={patientProfile}
         onSave={handleSaveProfile}
       />
       <PatientRequestAppointmentModal
@@ -426,7 +441,7 @@ function PatientRequestAppointmentModal({
       onSave({
         id: buildAppointmentId(),
         patientId: patientId,
-        patientName: patientName, 
+        patientName: patientName,
         date,
         time,
         volunteerName: "Atendimento solicitado pela paciente",
@@ -482,6 +497,8 @@ function PatientRequestAppointmentModal({
             <DatePicker
               value={date}
               onChange={setDate}
+              fromYear={new Date().getFullYear() - 2}
+              toYear={new Date().getFullYear() + 2}
               required
               className="text-sm"
             />
@@ -503,21 +520,26 @@ function PatientRequestAppointmentModal({
           <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
             Tipo de consulta
           </label>
-          <Select
-            value={consultationType}
-            onValueChange={setConsultationType}
-          >
+          <Select value={consultationType} onValueChange={setConsultationType}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="Acolhimento inicial">Acolhimento inicial</SelectItem>
+              <SelectItem value="Acolhimento inicial">
+                Acolhimento inicial
+              </SelectItem>
               <SelectItem value="Consulta de acompanhamento">
                 Consulta de acompanhamento
               </SelectItem>
-              <SelectItem value="Sessão de fisioterapia">Sessão de fisioterapia</SelectItem>
-              <SelectItem value="Sessão de psicologia">Sessão de psicologia</SelectItem>
-              <SelectItem value="Consulta de retorno">Consulta de retorno</SelectItem>
+              <SelectItem value="Sessão de fisioterapia">
+                Sessão de fisioterapia
+              </SelectItem>
+              <SelectItem value="Sessão de psicologia">
+                Sessão de psicologia
+              </SelectItem>
+              <SelectItem value="Consulta de retorno">
+                Consulta de retorno
+              </SelectItem>
               <SelectItem value="Outra">Outra</SelectItem>
             </SelectContent>
           </Select>
@@ -628,94 +650,268 @@ interface DashboardCardProps {
 interface PatientProfileModalProps {
   open: boolean;
   onClose: () => void;
-  patientUser: ManagedUser | null;
-  onSave: (user: ManagedUser) => void;
+  profile: PatientProfile | null;
+  onSave: (profile: PatientProfile) => void;
+}
+
+function emptyForm(): {
+  name: string;
+  email: string;
+  phone: string;
+  cpf: string;
+  birthDate: string;
+  city: string;
+  district: string;
+  familyHistory: "" | "sim" | "nao" | "nao_sei";
+  symptoms: string;
+} {
+  return {
+    name: "",
+    email: "",
+    phone: "",
+    cpf: "",
+    birthDate: "",
+    city: "",
+    district: "",
+    familyHistory: "",
+    symptoms: "",
+  };
 }
 
 function PatientProfileModal({
   open,
   onClose,
-  patientUser,
+  profile,
   onSave,
 }: PatientProfileModalProps) {
-  const [name, setName] = useState("");
-  const [birthDate, setBirthDate] = useState("");
+  const [form, setForm] = useState(emptyForm);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    if (patientUser) {
-      setName(patientUser.name);
-      setBirthDate(normalizeProfileDate(patientUser.date));
+    if (!open) return;
+    if (profile) {
+      setForm({
+        name: profile.name ?? "",
+        email: profile.email ?? "",
+        phone: profile.phone ? formatPhoneBR(profile.phone) : "",
+        cpf: profile.cpf ? formatCpf(profile.cpf) : "",
+        birthDate: normalizeProfileDate(profile.birthDate ?? ""),
+        city: profile.city ?? "",
+        district: profile.district ?? "",
+        familyHistory: profile.familyHistory ?? "",
+        symptoms: profile.symptoms ?? "",
+      });
     } else {
-      setName("");
-      setBirthDate("");
+      setForm(emptyForm());
     }
-  }, [open, patientUser]);
+    setErrors({});
+  }, [open, profile]);
+
+  const cpfReadonly = Boolean(profile?.cpf);
+
+  function setField<K extends keyof ReturnType<typeof emptyForm>>(
+    field: K,
+    value: ReturnType<typeof emptyForm>[K],
+  ) {
+    setForm((current) => ({ ...current, [field]: value }));
+    setErrors((current) => ({ ...current, [field]: "" }));
+  }
+
+  function validate(): boolean {
+    const next: Record<string, string> = {};
+    if (!form.name.trim()) next.name = "Informe o nome completo.";
+    if (!form.email.trim()) {
+      next.email = "Informe o e-mail.";
+    } else if (!/\S+@\S+\.\S+/.test(form.email.trim())) {
+      next.email = "Informe um e-mail válido.";
+    }
+    const phoneDigits = form.phone.replace(/\D/g, "");
+    if (!phoneDigits) {
+      next.phone = "Informe o telefone.";
+    } else if (phoneDigits.length < 10 || phoneDigits.length > 11) {
+      next.phone = "Telefone deve ter 10 ou 11 dígitos.";
+    }
+    if (!cpfReadonly) {
+      const cpfDigits = form.cpf.replace(/\D/g, "");
+      if (cpfDigits && cpfDigits.length !== 11) {
+        next.cpf = "CPF deve conter 11 dígitos.";
+      }
+    }
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  }
 
   function handleClose() {
+    if (submitting) return;
     onClose();
-    setName(patientUser?.name ?? "");
-    setBirthDate(normalizeProfileDate(patientUser?.date ?? ""));
+    setErrors({});
   }
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!patientUser) {
-      return;
+    if (!profile) return;
+    if (!validate()) return;
+    setSubmitting(true);
+    try {
+      onSave({
+        ...profile,
+        name: form.name.trim(),
+        email: form.email.trim().toLowerCase(),
+        phone: form.phone.replace(/\D/g, ""),
+        birthDate: form.birthDate || undefined,
+        city: form.city.trim() || undefined,
+        district: form.district.trim() || undefined,
+        familyHistory: form.familyHistory || undefined,
+        symptoms: form.symptoms.trim() || undefined,
+      });
+      onClose();
+    } finally {
+      setSubmitting(false);
     }
-
-    onSave({
-      ...patientUser,
-      name: name.trim(),
-      date: birthDate,
-    });
-    handleClose();
   }
 
-  if (!open) {
-    return null;
-  }
+  if (!open) return null;
 
   return (
     <Dialog
       open={open}
       onClose={handleClose}
       title="Atualizar cadastro"
-      description="Altere seu nome e data de nascimento."
+      description="Mantenha seus dados de contato e informações clínicas em dia."
+      className="max-w-2xl"
     >
       <form className="space-y-5" onSubmit={handleSubmit}>
-        <div>
-          <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
-            Nome completo
-          </label>
+        <Field label="Nome completo *" error={errors.name}>
           <Input
             type="text"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            required
-            className="text-sm"
+            value={form.name}
+            onChange={(event) => setField("name", event.target.value)}
+            className="rounded-2xl border-pink-200 bg-[var(--input-background)]"
           />
+        </Field>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="E-mail *" error={errors.email}>
+            <Input
+              type="email"
+              value={form.email}
+              onChange={(event) => setField("email", event.target.value)}
+              className="rounded-2xl border-pink-200 bg-[var(--input-background)]"
+            />
+          </Field>
+          <Field label="Telefone *" error={errors.phone}>
+            <Input
+              type="tel"
+              inputMode="tel"
+              maxLength={15}
+              value={form.phone}
+              onChange={(event) =>
+                setField("phone", formatPhoneBR(event.target.value))
+              }
+              placeholder="(47) 99999-9999"
+              className="rounded-2xl border-pink-200 bg-[var(--input-background)]"
+            />
+          </Field>
         </div>
-        <div>
-          <label className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
-            Data de nascimento
-          </label>
-          <DatePicker
-            value={birthDate}
-            onChange={setBirthDate}
-            required
-            className="text-sm"
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            label={cpfReadonly ? "CPF (não editável)" : "CPF"}
+            error={errors.cpf}
+          >
+            <Input
+              type="text"
+              value={form.cpf}
+              readOnly={cpfReadonly}
+              onChange={(event) =>
+                cpfReadonly
+                  ? undefined
+                  : setField("cpf", formatCpf(event.target.value))
+              }
+              placeholder="000.000.000-00"
+              className={`rounded-2xl border-pink-200 bg-[var(--input-background)] ${
+                cpfReadonly ? "cursor-not-allowed opacity-70" : ""
+              }`}
+            />
+          </Field>
+          <Field label="Data de nascimento">
+            <DatePicker
+              value={form.birthDate}
+              onChange={(value) => setField("birthDate", value)}
+              fromYear={1920}
+              toYear={new Date().getFullYear()}
+              className="rounded-2xl border-pink-200 bg-[var(--input-background)]"
+            />
+          </Field>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Cidade">
+            <Input
+              type="text"
+              value={form.city}
+              onChange={(event) => setField("city", event.target.value)}
+              className="rounded-2xl border-pink-200 bg-[var(--input-background)]"
+            />
+          </Field>
+          <Field label="Bairro">
+            <Input
+              type="text"
+              value={form.district}
+              onChange={(event) => setField("district", event.target.value)}
+              className="rounded-2xl border-pink-200 bg-[var(--input-background)]"
+            />
+          </Field>
+        </div>
+
+        <Field label="Histórico familiar de câncer">
+          <Select
+            value={form.familyHistory || "none"}
+            onValueChange={(value) =>
+              setField(
+                "familyHistory",
+                value === "none" ? "" : (value as "sim" | "nao" | "nao_sei"),
+              )
+            }
+          >
+            <SelectTrigger className="rounded-2xl border-pink-200 bg-[var(--input-background)] text-sm">
+              <SelectValue placeholder="Selecione..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Prefiro não informar</SelectItem>
+              <SelectItem value="sim">Sim</SelectItem>
+              <SelectItem value="nao">Não</SelectItem>
+              <SelectItem value="nao_sei">Não sei</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+
+        <Field label="Sintomas ou observações">
+          <Textarea
+            value={form.symptoms}
+            onChange={(event) => setField("symptoms", event.target.value)}
+            rows={3}
+            placeholder="Descreva sintomas, alergias ou observações relevantes."
+            className="rounded-2xl border-pink-200 bg-[var(--input-background)] text-sm"
           />
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-          <Button type="button" variant="secondary" onClick={handleClose}>
+        </Field>
+
+        <div className="flex flex-col gap-3 border-t border-pink-100 pt-4 sm:flex-row sm:justify-end">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleClose}
+            disabled={submitting}
+          >
             Cancelar
           </Button>
-          <Button type="submit" className="h-11 rounded-full bg-[var(--primary)] text-white hover:bg-[var(--primary)]/90">
-            Salvar alterações
+          <Button
+            type="submit"
+            disabled={submitting}
+            className="h-11 rounded-full bg-[var(--primary)] text-white hover:bg-[var(--primary)]/90 disabled:opacity-60"
+          >
+            {submitting ? "Salvando..." : "Salvar alterações"}
           </Button>
         </div>
       </form>
@@ -723,11 +919,7 @@ function PatientProfileModal({
   );
 }
 
-function DashboardCard({
-  icon,
-  title,
-  children,
-}: DashboardCardProps) {
+function DashboardCard({ icon, title, children }: DashboardCardProps) {
   return (
     <section className="flex min-h-[274px] flex-col rounded-2xl border border-pink-100 bg-white p-7 shadow-sm shadow-pink-100/50">
       <div className="mb-6 flex items-start justify-between gap-4">
@@ -740,5 +932,27 @@ function DashboardCard({
       </div>
       <div className="flex-1">{children}</div>
     </section>
+  );
+}
+
+function Field({
+  label,
+  error,
+  children,
+}: {
+  label: string;
+  error?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-semibold text-[var(--foreground)]">
+        {label}
+      </span>
+      {children}
+      {error && (
+        <span className="mt-1 block text-xs text-red-600">{error}</span>
+      )}
+    </label>
   );
 }

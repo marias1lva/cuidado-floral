@@ -441,6 +441,8 @@ export function AdminReports() {
                     from: value || undefined,
                   }))
                 }
+                fromYear={new Date().getFullYear() - 5}
+                toYear={new Date().getFullYear() + 1}
                 className="rounded-xl border-pink-200 bg-[var(--input-background)]"
               />
             </FilterField>
@@ -453,6 +455,8 @@ export function AdminReports() {
                     to: value || undefined,
                   }))
                 }
+                fromYear={new Date().getFullYear() - 5}
+                toYear={new Date().getFullYear() + 1}
                 className="rounded-xl border-pink-200 bg-[var(--input-background)]"
               />
             </FilterField>

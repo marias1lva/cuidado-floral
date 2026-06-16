@@ -10,10 +10,10 @@ import { cn } from "./utils";
 
 const WEEKDAYS = ["D", "S", "T", "Q", "Q", "S", "S"];
 
-const MONTH_FORMATTER = new Intl.DateTimeFormat("pt-BR", {
-  month: "long",
-  year: "numeric",
-});
+const MONTH_NAME_FORMATTER = new Intl.DateTimeFormat("pt-BR", { month: "long" });
+const MONTHS_PT = Array.from({ length: 12 }, (_, m) =>
+  MONTH_NAME_FORMATTER.format(new Date(2000, m, 1)),
+);
 
 const DATE_FORMATTER = new Intl.DateTimeFormat("pt-BR", {
   day: "2-digit",
@@ -27,6 +27,10 @@ type DatePickerProps = {
   placeholder?: string;
   min?: string;
   max?: string;
+  /** Ano mínimo no select de ano. Default: ano atual - 10. */
+  fromYear?: number;
+  /** Ano máximo no select de ano. Default: ano atual + 10. */
+  toYear?: number;
   required?: boolean;
   className?: string;
   "aria-invalid"?: boolean;
@@ -47,10 +51,26 @@ function DatePicker({
   placeholder = "Selecione a data",
   min,
   max,
+  fromYear,
+  toYear,
   required,
   className,
   "aria-invalid": ariaInvalid,
 }: DatePickerProps) {
+  const currentYear = new Date().getFullYear();
+  const yearOptions = React.useMemo(() => {
+    const start = fromYear ?? currentYear - 10;
+    const end = toYear ?? currentYear + 10;
+    const list = Array.from({ length: end - start + 1 }, (_, i) => start + i);
+    // Garante que o ano atualmente exibido aparece no select, mesmo fora do range.
+    if (value) {
+      const year = parseDate(value).getFullYear();
+      if (!list.includes(year)) {
+        list.unshift(year);
+      }
+    }
+    return list;
+  }, [fromYear, toYear, currentYear, value]);
   const [open, setOpen] = React.useState(false);
   const [visibleMonth, setVisibleMonth] = React.useState(() =>
     value ? parseDate(value) : startOfMonth(new Date()),
@@ -106,8 +126,47 @@ function DatePicker({
             >
               <ChevronLeft className="size-4" />
             </button>
-            <div className="text-sm font-semibold capitalize text-gray-700">
-              {MONTH_FORMATTER.format(visibleMonth)}
+            <div className="flex items-center gap-1">
+              <select
+                value={visibleMonth.getMonth()}
+                onChange={(event) =>
+                  setVisibleMonth(
+                    new Date(
+                      visibleMonth.getFullYear(),
+                      Number(event.target.value),
+                      1,
+                    ),
+                  )
+                }
+                aria-label="Selecionar mês"
+                className="cursor-pointer rounded-lg border border-pink-200 bg-pink-50 px-2 py-1 text-sm font-semibold capitalize text-pink-700 outline-none transition-colors hover:bg-pink-100 focus-visible:ring-2 focus-visible:ring-pink-300"
+              >
+                {MONTHS_PT.map((label, idx) => (
+                  <option key={idx} value={idx}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={visibleMonth.getFullYear()}
+                onChange={(event) =>
+                  setVisibleMonth(
+                    new Date(
+                      Number(event.target.value),
+                      visibleMonth.getMonth(),
+                      1,
+                    ),
+                  )
+                }
+                aria-label="Selecionar ano"
+                className="cursor-pointer rounded-lg border border-pink-200 bg-pink-50 px-2 py-1 text-sm font-semibold text-pink-700 outline-none transition-colors hover:bg-pink-100 focus-visible:ring-2 focus-visible:ring-pink-300"
+              >
+                {yearOptions.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
             </div>
             <button
               type="button"
