@@ -3,9 +3,11 @@ import {
   Bell,
   Calendar,
   FileText,
+  MapPin,
   Paperclip,
   Plus,
   Trash2,
+  Users,
 } from "lucide-react";
 
 import {
@@ -25,7 +27,6 @@ import type {
 } from "../../domain/types";
 import { PatientNotifications } from "./patient-notifications";
 import { PatientAppointmentsTimeline } from "./patient-appointments-timeline";
-import { PatientNetworkRegistration } from "./patient-network-registration";
 import { formatDateBR } from "./patient-utils";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
@@ -80,7 +81,6 @@ export function PatientDashboard({
   );
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [isNetworkRegistrationOpen, setIsNetworkRegistrationOpen] = useState(false);
   const [hasLoadedAppointments, setHasLoadedAppointments] = useState(false);
   const [hasLoadedNotifications, setHasLoadedNotifications] = useState(false);
   const patientName =
@@ -277,24 +277,6 @@ export function PatientDashboard({
         </DashboardCard>
 
         <DashboardCard
-          icon={<Heart className="h-5 w-5 text-pink-600" />}
-          title="Rede Feminina"
-        >
-          <div className="flex h-full flex-col justify-end">
-            <p className="mb-5 max-w-[260px] text-sm leading-relaxed text-[var(--muted-foreground)]">
-              Permita que uma nova paciente se cadastre na Rede Feminina e envie suas informações para análise.
-            </p>
-            <Button
-              className="h-11 w-full rounded-full bg-[var(--primary)] font-semibold text-white hover:bg-[var(--primary)]/90"
-              onClick={() => setIsNetworkRegistrationOpen(true)}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Cadastrar na Rede
-            </Button>
-          </div>
-        </DashboardCard>
-
-        <DashboardCard
           icon={
             <div className="relative">
               <Bell className="h-5 w-5 text-pink-600" />
@@ -338,10 +320,6 @@ export function PatientDashboard({
         onSave={handleSaveAppointment}
         patientName={patientName}
         patientId={patientId}
-      />
-      <PatientNetworkRegistration
-        open={isNetworkRegistrationOpen}
-        onClose={() => setIsNetworkRegistrationOpen(false)}
       />
     </div>
   );
@@ -777,125 +755,165 @@ function PatientProfileModal({
     <Dialog
       open={open}
       onClose={handleClose}
-      title="Atualizar cadastro"
-      description="Mantenha seus dados de contato e informações clínicas em dia."
+      title="Atualizar dados"
+      description="Atualize suas informações pessoais e histórico médico"
       className="max-w-2xl"
     >
-      <form className="space-y-5" onSubmit={handleSubmit}>
-        <Field label="Nome completo *" error={errors.name}>
-          <Input
-            type="text"
-            value={form.name}
-            onChange={(event) => setField("name", event.target.value)}
-            className="rounded-2xl border-pink-200 bg-[var(--input-background)]"
-          />
-        </Field>
+      <form className="space-y-6" onSubmit={handleSubmit}>
+        {/* Informações Pessoais */}
+        <section>
+          <div className="mb-4 flex items-center gap-2">
+            <Users className="h-5 w-5 text-pink-600" />
+            <h3 className="font-semibold text-[var(--foreground)]">
+              Informações Pessoais
+            </h3>
+          </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="E-mail *" error={errors.email}>
-            <Input
-              type="email"
-              value={form.email}
-              onChange={(event) => setField("email", event.target.value)}
-              className="rounded-2xl border-pink-200 bg-[var(--input-background)]"
-            />
-          </Field>
-          <Field label="Telefone *" error={errors.phone}>
-            <Input
-              type="tel"
-              inputMode="tel"
-              maxLength={15}
-              value={form.phone}
-              onChange={(event) =>
-                setField("phone", formatPhoneBR(event.target.value))
-              }
-              placeholder="(47) 99999-9999"
-              className="rounded-2xl border-pink-200 bg-[var(--input-background)]"
-            />
-          </Field>
-        </div>
+          <div className="space-y-4">
+            <Field label="Nome completo *" error={errors.name}>
+              <Input
+                type="text"
+                value={form.name}
+                onChange={(event) => setField("name", event.target.value)}
+                placeholder="Seu nome completo"
+                className="rounded-2xl border-pink-200 bg-[var(--input-background)] text-sm"
+              />
+            </Field>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field
-            label={cpfReadonly ? "CPF (não editável)" : "CPF"}
-            error={errors.cpf}
-          >
-            <Input
-              type="text"
-              value={form.cpf}
-              readOnly={cpfReadonly}
-              onChange={(event) =>
-                cpfReadonly
-                  ? undefined
-                  : setField("cpf", formatCpf(event.target.value))
-              }
-              placeholder="000.000.000-00"
-              className={`rounded-2xl border-pink-200 bg-[var(--input-background)] ${
-                cpfReadonly ? "cursor-not-allowed opacity-70" : ""
-              }`}
-            />
-          </Field>
-          <Field label="Data de nascimento">
-            <DatePicker
-              value={form.birthDate}
-              onChange={(value) => setField("birthDate", value)}
-              fromYear={1920}
-              toYear={new Date().getFullYear()}
-              className="rounded-2xl border-pink-200 bg-[var(--input-background)]"
-            />
-          </Field>
-        </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label={cpfReadonly ? "CPF (não editável)" : "CPF"}
+                error={errors.cpf}
+              >
+                <Input
+                  type="text"
+                  value={form.cpf}
+                  readOnly={cpfReadonly}
+                  onChange={(event) =>
+                    cpfReadonly
+                      ? undefined
+                      : setField("cpf", formatCpf(event.target.value))
+                  }
+                  placeholder="000.000.000-00"
+                  className={`rounded-2xl border-pink-200 bg-[var(--input-background)] text-sm ${
+                    cpfReadonly ? "cursor-not-allowed opacity-70" : ""
+                  }`}
+                />
+              </Field>
+              <Field label="Data de nascimento">
+                <DatePicker
+                  value={form.birthDate}
+                  onChange={(value) => setField("birthDate", value)}
+                  fromYear={1920}
+                  toYear={new Date().getFullYear()}
+                  className="rounded-2xl border-pink-200 bg-[var(--input-background)] text-sm"
+                />
+              </Field>
+            </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Cidade">
-            <Input
-              type="text"
-              value={form.city}
-              onChange={(event) => setField("city", event.target.value)}
-              className="rounded-2xl border-pink-200 bg-[var(--input-background)]"
-            />
-          </Field>
-          <Field label="Bairro">
-            <Input
-              type="text"
-              value={form.district}
-              onChange={(event) => setField("district", event.target.value)}
-              className="rounded-2xl border-pink-200 bg-[var(--input-background)]"
-            />
-          </Field>
-        </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="E-mail *" error={errors.email}>
+                <Input
+                  type="email"
+                  value={form.email}
+                  onChange={(event) => setField("email", event.target.value)}
+                  placeholder="seu.email@exemplo.com"
+                  className="rounded-2xl border-pink-200 bg-[var(--input-background)] text-sm"
+                />
+              </Field>
+              <Field label="Telefone/WhatsApp *" error={errors.phone}>
+                <Input
+                  type="tel"
+                  inputMode="tel"
+                  maxLength={15}
+                  value={form.phone}
+                  onChange={(event) =>
+                    setField("phone", formatPhoneBR(event.target.value))
+                  }
+                  placeholder="(47) 99999-9999"
+                  className="rounded-2xl border-pink-200 bg-[var(--input-background)] text-sm"
+                />
+              </Field>
+            </div>
+          </div>
+        </section>
 
-        <Field label="Histórico familiar de câncer">
-          <Select
-            value={form.familyHistory || "none"}
-            onValueChange={(value) =>
-              setField(
-                "familyHistory",
-                value === "none" ? "" : (value as "sim" | "nao" | "nao_sei"),
-              )
-            }
-          >
-            <SelectTrigger className="rounded-2xl border-pink-200 bg-[var(--input-background)] text-sm">
-              <SelectValue placeholder="Selecione..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Prefiro não informar</SelectItem>
-              <SelectItem value="sim">Sim</SelectItem>
-              <SelectItem value="nao">Não</SelectItem>
-              <SelectItem value="nao_sei">Não sei</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
+        {/* Localização */}
+        <section>
+          <div className="mb-4 flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-pink-600" />
+            <h3 className="font-semibold text-[var(--foreground)]">
+              Localização
+            </h3>
+          </div>
 
-        <Field label="Sintomas ou observações">
-          <Textarea
-            value={form.symptoms}
-            onChange={(event) => setField("symptoms", event.target.value)}
-            rows={3}
-            placeholder="Descreva sintomas, alergias ou observações relevantes."
-            className="rounded-2xl border-pink-200 bg-[var(--input-background)] text-sm"
-          />
-        </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Cidade">
+              <Input
+                type="text"
+                value={form.city}
+                onChange={(event) => setField("city", event.target.value)}
+                placeholder="Sua cidade"
+                className="rounded-2xl border-pink-200 bg-[var(--input-background)] text-sm"
+              />
+            </Field>
+            <Field label="Bairro">
+              <Input
+                type="text"
+                value={form.district}
+                onChange={(event) => setField("district", event.target.value)}
+                placeholder="Seu bairro"
+                className="rounded-2xl border-pink-200 bg-[var(--input-background)] text-sm"
+              />
+            </Field>
+          </div>
+        </section>
+
+        {/* Informações de Saúde */}
+        <section>
+          <div className="mb-4 flex items-center gap-2">
+            <FileText className="h-5 w-5 text-pink-600" />
+            <h3 className="font-semibold text-[var(--foreground)]">
+              Informações de Saúde
+            </h3>
+          </div>
+
+          <div className="space-y-4">
+            <Field label="Histórico familiar de câncer">
+              <Select
+                value={form.familyHistory || "none"}
+                onValueChange={(value) =>
+                  setField(
+                    "familyHistory",
+                    value === "none"
+                      ? ""
+                      : (value as "sim" | "nao" | "nao_sei"),
+                  )
+                }
+              >
+                <SelectTrigger className="rounded-2xl border-pink-200 bg-[var(--input-background)] text-sm">
+                  <SelectValue placeholder="Selecione..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Prefiro não informar</SelectItem>
+                  <SelectItem value="sim">Sim</SelectItem>
+                  <SelectItem value="nao">Não</SelectItem>
+                  <SelectItem value="nao_sei">Não sei</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+
+            <Field label="Sintomas ou observações">
+              <Textarea
+                value={form.symptoms}
+                onChange={(event) => setField("symptoms", event.target.value)}
+                rows={3}
+                placeholder="Descreva sintomas, alergias, condições médicas ou observações relevantes."
+                className="rounded-2xl border-pink-200 bg-[var(--input-background)] text-sm"
+              />
+            </Field>
+          </div>
+        </section>
 
         <div className="flex flex-col gap-3 border-t border-pink-100 pt-4 sm:flex-row sm:justify-end">
           <Button
