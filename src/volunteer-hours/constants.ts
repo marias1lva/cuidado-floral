@@ -1,4 +1,4 @@
-import type { VolunteerAgendaItem, VolunteerActivityCategory, VolunteerHourEntry } from "./types";
+import type { VolunteerActivityCategory, VolunteerHourEntry } from "./types";
 
 export const activityCategoryOptions: Array<{
   value: VolunteerActivityCategory;
@@ -35,29 +35,5 @@ export const initialVolunteerHours: VolunteerHourEntry[] = [
     location: "Sala de campanhas",
     notes: "Separação de folders e kits para ação externa.",
     createdAt: "2026-04-05T15:00:00.000Z",
-  },
-];
-
-export const volunteerAgenda: VolunteerAgendaItem[] = [
-  {
-    id: 1,
-    title: "Plantão de acolhimento",
-    date: "2026-04-09",
-    shift: "08:00 - 12:00",
-    location: "Recepção principal",
-  },
-  {
-    id: 2,
-    title: "Roda de conversa com pacientes",
-    date: "2026-04-11",
-    shift: "14:00 - 16:00",
-    location: "Sala multiuso",
-  },
-  {
-    id: 3,
-    title: "Mutirão de organização do bazar",
-    date: "2026-04-13",
-    shift: "09:00 - 13:00",
-    location: "Espaço de eventos",
   },
 ];

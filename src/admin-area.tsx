@@ -19,8 +19,10 @@ import {
 } from "lucide-react";
 
 import { AdminUserModal } from "./admin/admin-user-modal";
+import { ChangePasswordButton } from "./change-password-button";
 import { AdminReports } from "./admin/admin-reports";
 import { AdminDonations } from "./admin/admin-donations";
+import { AdminActivities } from "./admin/admin-activities";
 import type { ManagedUser, ManagedUserRole } from "./admin/types";
 import {
   loadCampaigns,
@@ -51,11 +53,23 @@ import {
   notificationTypeLabel,
 } from "./user-area/patient/patient-utils";
 
-type AdminTab = "users" | "campaigns" | "donations" | "reports";
+type AdminTab =
+  | "users"
+  | "campaigns"
+  | "donations"
+  | "activities"
+  | "reports";
 
 function getTodayDateLabel() {
   return new Intl.DateTimeFormat("pt-BR").format(new Date());
 }
+
+const roleBadgeClass: Record<ManagedUserRole, string> = {
+  admin: "border-pink-200 bg-pink-50 text-pink-700",
+  voluntaria: "border-purple-200 bg-purple-50 text-purple-700",
+  paciente: "border-rose-200 bg-rose-50 text-rose-700",
+  doador: "border-blue-200 bg-blue-50 text-blue-700",
+};
 
 function formatRoleLabel(role: ManagedUserRole) {
   if (role === "voluntaria") {
@@ -81,6 +95,11 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<ManagedUser | null>(null);
   const [hasLoadedUsers, setHasLoadedUsers] = useState(false);
+  // Senhas provisórias de usuários recém-criados, anexadas no próximo save
+  // e descartadas após a persistência. O state de `users` permanece limpo.
+  const [pendingPasswords, setPendingPasswords] = useState<
+    Record<number, string>
+  >({});
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [hasLoadedNotifications, setHasLoadedNotifications] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -125,10 +144,24 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
 
   useEffect(() => {
     if (!hasLoadedUsers) return;
-    void saveManagedUsers(users).catch((error) => {
-      console.error("Falha ao salvar usuários", error);
-    });
-  }, [users, hasLoadedUsers]);
+    const passwordsToSend = pendingPasswords;
+    void saveManagedUsers(users, passwordsToSend)
+      .then(() => {
+        // Limpa apenas se o save partiu com as senhas que tínhamos no momento.
+        if (Object.keys(passwordsToSend).length > 0) {
+          setPendingPasswords((current) => {
+            const next = { ...current };
+            for (const key of Object.keys(passwordsToSend)) {
+              delete next[Number(key)];
+            }
+            return next;
+          });
+        }
+      })
+      .catch((error) => {
+        console.error("Falha ao salvar usuários", error);
+      });
+  }, [users, hasLoadedUsers, pendingPasswords]);
 
   useEffect(() => {
     if (!hasLoadedNotifications) return;
@@ -262,22 +295,34 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
     email: string;
     cpf: string;
     type: ManagedUserRole;
+    password?: string;
   }) {
     if (editingUser) {
+      // Edição não toca em senha; ignora password mesmo se vier.
+      const { password: _ignored, ...rest } = payload;
+      void _ignored;
       setUsers((current) =>
         current.map((user) =>
-          user.id === editingUser.id ? { ...user, ...payload } : user,
+          user.id === editingUser.id ? { ...user, ...rest } : user,
         ),
       );
       return;
     }
 
+    const { password, ...rest } = payload;
+    // Date.now() em ms estoura INT do MySQL (limite ~2.1 bi); usamos segundos.
     const newUser: ManagedUser = {
-      id: Date.now(),
-      ...payload,
+      id: Math.floor(Date.now() / 1000),
+      ...rest,
       status: "Ativo",
       date: getTodayDateLabel(),
     };
+    if (password) {
+      setPendingPasswords((current) => ({
+        ...current,
+        [newUser.id]: password,
+      }));
+    }
     setUsers((current) => [newUser, ...current]);
   }
 
@@ -412,6 +457,7 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
             <User size={17} />
             <span>Administrador</span>
           </div>
+          <ChangePasswordButton />
           <button
             onClick={onLogout}
             className="flex cursor-pointer items-center gap-1 border-0 bg-transparent text-sm text-[var(--primary)] transition-opacity hover:opacity-75"
@@ -513,8 +559,7 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
           </Card>
         </div>
 
-        {/* Tabs — agora com 4 opções */}
-        <div className="mb-6 grid w-full grid-cols-4 rounded-full bg-pink-100 p-1 shadow-sm">
+        <div className="mb-6 grid w-full grid-cols-5 rounded-full bg-pink-100 p-1 shadow-sm">
           <TabButton
             isActive={activeTab === "users"}
             label="Usuários"
@@ -529,6 +574,11 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
             isActive={activeTab === "campaigns"}
             label="Campanhas"
             onClick={() => setActiveTab("campaigns")}
+          />
+          <TabButton
+            isActive={activeTab === "activities"}
+            label="Atividades"
+            onClick={() => setActiveTab("activities")}
           />
           <TabButton
             isActive={activeTab === "reports"}
@@ -613,7 +663,7 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
                           <td className="px-4 py-3">
                             <Badge
                               variant="outline"
-                              className="border-purple-200 bg-purple-50 text-purple-700"
+                              className={roleBadgeClass[user.type]}
                             >
                               {formatRoleLabel(user.type)}
                             </Badge>
@@ -680,6 +730,8 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
           </Card>
         )}
 
+        {activeTab === "activities" && <AdminActivities />}
+
         {activeTab === "reports" && <AdminReports />}
       </main>
 
@@ -715,30 +767,6 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
                   <MapPin size={14} className="text-[var(--primary)]" />
                   Itapema, SC
                 </div>
-              </div>
-            </div>
-
-            <div>
-              <p className="mb-3 text-sm font-semibold">Links Úteis</p>
-              <div className="flex flex-col gap-2">
-                {[
-                  { label: "Sobre o Câncer de Mama", highlight: false },
-                  { label: "Como Ajudar", highlight: true },
-                  { label: "Política de Privacidade", highlight: false },
-                  { label: "Termos de Uso", highlight: false },
-                ].map(({ label, highlight }) => (
-                  <a
-                    key={label}
-                    href="#"
-                    className={`text-sm no-underline transition-colors hover:text-[var(--primary)] ${
-                      highlight
-                        ? "text-[var(--primary)]"
-                        : "text-[var(--muted-foreground)]"
-                    }`}
-                  >
-                    {label}
-                  </a>
-                ))}
               </div>
             </div>
           </div>

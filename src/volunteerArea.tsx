@@ -16,6 +16,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { Button } from "./ui/button";
+import { ChangePasswordButton } from "./change-password-button";
 import { Input } from "./ui/input";
 import { Badge } from "./ui/badge";
 import {
@@ -43,6 +44,7 @@ import {
 import { loadPatients, savePatients } from "./domain/patients-data";
 import { loadSectors } from "./domain/sectors-data";
 import {
+  claimVolunteerAgendaItem,
   loadVolunteerAgenda,
   loadVolunteerHours,
   saveVolunteerHours,
@@ -269,10 +271,46 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
   const completedCount = patientList.filter(
     (p) => p.status === "concluido",
   ).length;
-  const totalHours = volunteerHours.reduce(
-    (sum, entry) => sum + entry.hours,
-    0,
+  const myHours = useMemo(
+    () => volunteerHours.filter((entry) => entry.volunteerId === volunteerId),
+    [volunteerHours, volunteerId],
   );
+  const totalHours = myHours.reduce((sum, entry) => sum + entry.hours, 0);
+
+  const [claimingId, setClaimingId] = useState<number | null>(null);
+  const loggedUserId = loggedUser?.sub;
+
+  // Mostra atividades abertas + as que já são minhas.
+  const visibleAgenda = useMemo(
+    () =>
+      volunteerAgenda.filter(
+        (item) =>
+          item.status === "aberta" || item.volunteerId === loggedUserId,
+      ),
+    [volunteerAgenda, loggedUserId],
+  );
+
+  async function handleClaimActivity(item: VolunteerAgendaItem) {
+    if (claimingId !== null) return;
+    setClaimingId(item.id);
+    try {
+      const updated = await claimVolunteerAgendaItem(item.id);
+      setVolunteerAgenda((current) =>
+        current.map((a) => (a.id === updated.id ? updated : a)),
+      );
+    } catch (error) {
+      console.error("Falha ao pegar atividade", error);
+      // Recarrega pra ter a verdade do servidor (ex.: outra pegou antes).
+      try {
+        const fresh = await loadVolunteerAgenda();
+        setVolunteerAgenda(fresh);
+      } catch (e) {
+        console.error("Falha ao recarregar agenda", e);
+      }
+    } finally {
+      setClaimingId(null);
+    }
+  }
 
   const filtered = patientList.filter((p) => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase());
@@ -545,6 +583,7 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
             <User size={17} />
             <span>{volunteerName}</span>
           </div>
+          <ChangePasswordButton />
           <button
             onClick={onLogout}
             className="flex items-center gap-1 text-sm text-[var(--primary)] bg-transparent border-0 cursor-pointer hover:opacity-75 transition-opacity"
@@ -605,8 +644,14 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
             </div>
 
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-              <VolunteerAgenda items={volunteerAgenda} />
-              <VolunteerHoursList entries={volunteerHours} />
+              <VolunteerAgenda
+                items={visibleAgenda}
+                currentVolunteerId={loggedUserId}
+                onClaim={handleClaimActivity}
+                claimingId={claimingId}
+                emptyMessage="Nenhuma atividade disponível no momento."
+              />
+              <VolunteerHoursList entries={myHours} />
             </div>
           </div>
         ) : (
@@ -819,31 +864,6 @@ export function VolunteerArea({ onLogout }: VolunteerAreaProps) {
                   <MapPin size={14} className="text-[var(--primary)]" />
                   Itapema, SC
                 </div>
-              </div>
-            </div>
-
-            {/* Links Úteis */}
-            <div>
-              <p className="font-semibold text-sm mb-3">Links Úteis</p>
-              <div className="flex flex-col gap-2">
-                {[
-                  { label: "Sobre o Câncer de Mama", highlight: false },
-                  { label: "Como Ajudar", highlight: true },
-                  { label: "Política de Privacidade", highlight: false },
-                  { label: "Termos de Uso", highlight: false },
-                ].map(({ label, highlight }) => (
-                  <a
-                    key={label}
-                    href="#"
-                    className={`text-sm no-underline hover:text-[var(--primary)] transition-colors ${
-                      highlight
-                        ? "text-[var(--primary)]"
-                        : "text-[var(--muted-foreground)]"
-                    }`}
-                  >
-                    {label}
-                  </a>
-                ))}
               </div>
             </div>
           </div>
