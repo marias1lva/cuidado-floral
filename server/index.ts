@@ -16,14 +16,23 @@ import type {
 import type { VolunteerHourEntry } from "../src/volunteer-hours/types";
 import { testConnection } from "./db/connection";
 import {
-  getUsers, saveUsers, toManagedUsers,
+  getUsers, saveUsers, toManagedUsers, updateUserPasswordHash,
   getPatients, savePatients,
+  getPatientProfileByUserId, savePatientProfile as savePatientProfileDb,
+  type PatientProfileUpdate,
   getAppointments, saveAppointments,
   getNotifications, saveNotifications,
   getDonations, saveDonations,
   getCampaigns, getSectors,
   getVolunteerHours, saveVolunteerHours,
   getVolunteerAgenda,
+  createVolunteerAgendaItem,
+  updateVolunteerAgendaItem,
+  deleteVolunteerAgendaItem,
+  claimVolunteerAgendaItem,
+  getActiveVolunteerIds,
+  getActiveAdminIds,
+  insertNotifications,
 } from "./db/queries";
 
 
@@ -112,6 +121,48 @@ app.post<{ Body: { email?: string; password?: string } }>(
   },
 );
 
+// Trocar senha do usuário logado
+app.post<{
+  Body: { currentPassword?: string; newPassword?: string };
+}>(
+  "/api/auth/change-password",
+  { preHandler: requireRole(ALL_ROLES) },
+  async (request, reply) => {
+    const currentPassword = request.body.currentPassword ?? "";
+    const newPassword = request.body.newPassword ?? "";
+
+    if (!currentPassword || !newPassword) {
+      return reply.status(400).send({
+        message: "Informe a senha atual e a nova senha.",
+      });
+    }
+    if (newPassword.length < 6) {
+      return reply.status(400).send({
+        message: "A nova senha deve ter ao menos 6 caracteres.",
+      });
+    }
+    if (currentPassword === newPassword) {
+      return reply.status(400).send({
+        message: "A nova senha deve ser diferente da atual.",
+      });
+    }
+
+    const userId = request.user.sub;
+    const users = await getUsers();
+    const user = users.find((u) => u.id === userId);
+    if (!user) {
+      return reply.status(404).send({ message: "Usuário não encontrado." });
+    }
+    if (!bcrypt.compareSync(currentPassword, user.passwordHash)) {
+      return reply.status(401).send({ message: "Senha atual incorreta." });
+    }
+
+    const newHash = bcrypt.hashSync(newPassword, 10);
+    await updateUserPasswordHash(userId, newHash);
+    return { ok: true };
+  },
+);
+
 // Cadastro
 app.post("/api/auth/register", async (request, reply) => {
   const { name, email, password, cpf, type } = request.body as any;
@@ -175,7 +226,59 @@ app.put<{ Body: Patient[] }>("/api/patients",
   async (request) => savePatients(request.body),
 );
 
-// Atendimentos 
+// Perfil consolidado da paciente (usuarios + pacientes).
+// Paciente edita o próprio perfil; admin e voluntária podem consultar pelo userId.
+app.get<{ Querystring: { userId?: string } }>(
+  "/api/patients/profile",
+  { preHandler: requireRole(["paciente", "admin", "voluntaria"]) },
+  async (request, reply) => {
+    const userId =
+      request.user.role === "paciente"
+        ? request.user.sub
+        : Number(request.query.userId ?? 0);
+    if (!userId) {
+      return reply.status(400).send({ message: "userId é obrigatório." });
+    }
+    const profile = await getPatientProfileByUserId(userId);
+    if (!profile) {
+      return reply.status(404).send({ message: "Perfil não encontrado." });
+    }
+    return profile;
+  },
+);
+
+app.put<{ Body: PatientProfileUpdate & { userId?: number } }>(
+  "/api/patients/profile",
+  { preHandler: requireRole(["paciente", "admin"]) },
+  async (request, reply) => {
+    const userId =
+      request.user.role === "paciente"
+        ? request.user.sub
+        : Number(request.body.userId ?? 0);
+    if (!userId) {
+      return reply.status(400).send({ message: "userId é obrigatório." });
+    }
+    const { name, email, phone } = request.body;
+    if (!name?.trim() || !email?.trim() || !phone?.trim()) {
+      return reply.status(400).send({
+        message: "Nome, e-mail e telefone são obrigatórios.",
+      });
+    }
+    const saved = await savePatientProfileDb(userId, {
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      phone: phone.trim(),
+      birthDate: request.body.birthDate ?? null,
+      city: request.body.city ?? null,
+      district: request.body.district ?? null,
+      familyHistory: request.body.familyHistory ?? null,
+      symptoms: request.body.symptoms ?? null,
+    });
+    return saved;
+  },
+);
+
+// Atendimentos
 app.get("/api/appointments",
   { preHandler: requireRole(["admin", "voluntaria", "paciente"]) },
   async () => getAppointments(),
@@ -210,15 +313,22 @@ app.get("/api/users",
   { preHandler: requireRole(["admin"]) },
   async () => toManagedUsers(await getUsers()),
 );
-app.put<{ Body: ManagedUser[] }>("/api/users",
+app.put<{ Body: (ManagedUser & { password?: string })[] }>("/api/users",
   { preHandler: requireRole(["admin"]) },
   async (request) => {
     const existing = await getUsers();
-    // Gerando o hash localmente pelo bcrypt, removendo necessidade do mock-data
     const defaultHash = bcrypt.hashSync("123", 10);
-    const toSave = request.body.map((user) => {
+    const toSave = request.body.map((item) => {
+      const { password, ...user } = item;
       const current = existing.find((u) => u.id === user.id);
-      return { ...user, passwordHash: current?.passwordHash ?? defaultHash };
+      // Usuário existente: preserva o hash atual (edição nunca altera senha).
+      // Usuário novo: usa a senha enviada pelo admin (hasheada); fallback "123".
+      const passwordHash = current
+        ? current.passwordHash
+        : password && password.length >= 6
+          ? bcrypt.hashSync(password, 10)
+          : defaultHash;
+      return { ...user, passwordHash };
     });
     const saved = await saveUsers(toSave);
     return toManagedUsers(saved);
@@ -239,13 +349,133 @@ app.put<{ Body: VolunteerHourEntry[] }>("/api/volunteer-hours",
   async (request) => saveVolunteerHours(request.body),
 );
 
-// Agenda 
+// Agenda
 app.get("/api/volunteer-agenda",
   { preHandler: requireRole(["admin", "voluntaria"]) },
   async () => getVolunteerAgenda(),
 );
 
-// Upload de Anexos 
+interface AgendaPayload {
+  title: string;
+  description?: string;
+  date: string;
+  shift: string;
+  location: string;
+  estimatedDuration?: string;
+}
+
+function makeNotificationId(prefix = "nt"): string {
+  return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
+}
+
+// Admin cria atividade -> broadcast pra todas as voluntárias ativas.
+app.post<{ Body: AgendaPayload }>(
+  "/api/volunteer-agenda",
+  { preHandler: requireRole(["admin"]) },
+  async (request, reply) => {
+    const { title, date, shift, location } = request.body;
+    if (!title?.trim() || !date || !shift?.trim() || !location?.trim()) {
+      return reply.status(400).send({
+        message: "Título, data, turno e local são obrigatórios.",
+      });
+    }
+    const created = await createVolunteerAgendaItem({
+      title: title.trim(),
+      description: request.body.description?.trim() || undefined,
+      date,
+      shift: shift.trim(),
+      location: location.trim(),
+      estimatedDuration: request.body.estimatedDuration?.trim() || undefined,
+    });
+
+    // Notifica todas as voluntárias ativas.
+    const volunteerIds = await getActiveVolunteerIds();
+    const now = new Date().toISOString();
+    const notifications = volunteerIds.map((vid) => ({
+      id: makeNotificationId(),
+      recipientRole: "voluntaria" as const,
+      recipientId: `vol-${vid}`,
+      type: "geral" as const,
+      title: "Nova atividade disponível",
+      message: `Nova atividade "${created.title}" em ${created.date}, ${created.shift}, ${created.location}.`,
+      date: now,
+      read: false,
+    }));
+    try {
+      await insertNotifications(notifications);
+    } catch (err) {
+      console.error("Falha ao enviar notificações de nova atividade", err);
+    }
+    return created;
+  },
+);
+
+app.put<{ Params: { id: string }; Body: AgendaPayload }>(
+  "/api/volunteer-agenda/:id",
+  { preHandler: requireRole(["admin"]) },
+  async (request, reply) => {
+    const id = Number(request.params.id);
+    const updated = await updateVolunteerAgendaItem(id, {
+      title: request.body.title.trim(),
+      description: request.body.description?.trim() || undefined,
+      date: request.body.date,
+      shift: request.body.shift.trim(),
+      location: request.body.location.trim(),
+      estimatedDuration: request.body.estimatedDuration?.trim() || undefined,
+    });
+    if (!updated) {
+      return reply.status(404).send({ message: "Atividade não encontrada." });
+    }
+    return updated;
+  },
+);
+
+app.delete<{ Params: { id: string } }>(
+  "/api/volunteer-agenda/:id",
+  { preHandler: requireRole(["admin"]) },
+  async (request) => {
+    await deleteVolunteerAgendaItem(Number(request.params.id));
+    return { ok: true };
+  },
+);
+
+// Voluntária pega atividade aberta -> notifica todos os admins.
+app.post<{ Params: { id: string } }>(
+  "/api/volunteer-agenda/:id/claim",
+  { preHandler: requireRole(["voluntaria"]) },
+  async (request, reply) => {
+    const id = Number(request.params.id);
+    const volunteerId = request.user.sub;
+    const claimed = await claimVolunteerAgendaItem(id, volunteerId);
+    if (!claimed) {
+      return reply.status(409).send({
+        message: "Atividade já foi atribuída a outra voluntária.",
+      });
+    }
+
+    const adminIds = await getActiveAdminIds();
+    const now = new Date().toISOString();
+    const notifications = adminIds.map((aid) => ({
+      id: makeNotificationId(),
+      recipientRole: "admin" as const,
+      recipientId: `admin-${aid}`,
+      type: "geral" as const,
+      title: "Atividade atribuída",
+      message: `${request.user.name} pegou a atividade "${claimed.title}" (${claimed.date}, ${claimed.shift}).`,
+      date: now,
+      read: false,
+    }));
+    try {
+      await insertNotifications(notifications);
+    } catch (err) {
+      console.error("Falha ao notificar admin sobre claim", err);
+    }
+    return claimed;
+  },
+);
+
+// Upload de Anexos
+
 app.post("/api/uploads",
   { preHandler: requireRole(ALL_ROLES) },
   async (request, reply) => {

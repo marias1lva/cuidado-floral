@@ -18,6 +18,7 @@ export interface StoredUser {
   name: string;
   email: string;
   cpf: string;
+  telefone?: string;
   type: "admin" | "voluntaria" | "paciente" | "doador";
   status: "Ativo" | "Inativo";
   date?: string;
@@ -50,7 +51,7 @@ function toMysqlDatetime(val: unknown): string {
 }
 
 
-// USUÁRIOS 
+// USUÁRIOS
 export async function getUsers(): Promise<StoredUser[]> {
   const [rows] = await pool.query<any[]>(`
     SELECT
@@ -58,6 +59,7 @@ export async function getUsers(): Promise<StoredUser[]> {
       nome        AS name,
       email,
       cpf,
+      telefone,
       tipo_usuario AS type,
       status,
       DATE_FORMAT(data_cadastro, '%d/%m/%Y') AS date,
@@ -81,13 +83,14 @@ export async function saveUsers(users: StoredUser[]): Promise<StoredUser[]> {
         : new Date().toISOString().slice(0, 10);
 
       await conn.query(
-        `INSERT INTO usuarios (id, nome, email, cpf, tipo_usuario, status, data_cadastro, senha_hash)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO usuarios (id, nome, email, cpf, telefone, tipo_usuario, status, data_cadastro, senha_hash)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE
            nome=VALUES(nome), email=VALUES(email), cpf=VALUES(cpf),
+           telefone=VALUES(telefone),
            tipo_usuario=VALUES(tipo_usuario), status=VALUES(status),
            data_cadastro=VALUES(data_cadastro), senha_hash=VALUES(senha_hash)`,
-        [u.id, u.name, u.email, u.cpf, u.type, u.status, dateMysql, u.passwordHash],
+        [u.id, u.name, u.email, u.cpf, u.telefone ?? null, u.type, u.status, dateMysql, u.passwordHash],
       );
 
       if (u.type === "voluntaria") {
@@ -107,6 +110,107 @@ export async function saveUsers(users: StoredUser[]): Promise<StoredUser[]> {
   } finally {
     conn.release();
   }
+}
+
+export async function updateUserPasswordHash(
+  id: number,
+  passwordHash: string,
+): Promise<void> {
+  await pool.query(`UPDATE usuarios SET senha_hash = ? WHERE id = ?`, [
+    passwordHash,
+    id,
+  ]);
+}
+
+// ── Perfil consolidado da paciente (usuarios + pacientes) ─────────────
+
+export interface PatientProfileRecord {
+  userId: number;
+  patientId: string;
+  name: string;
+  email: string;
+  cpf: string;
+  phone: string;
+  birthDate?: string; // YYYY-MM-DD
+  city?: string;
+  district?: string;
+  familyHistory?: "sim" | "nao" | "nao_sei";
+  symptoms?: string;
+}
+
+export async function getPatientProfileByUserId(
+  userId: number,
+): Promise<PatientProfileRecord | null> {
+  const [rows] = await pool.query<any[]>(
+    `
+    SELECT
+      u.id                                       AS userId,
+      p.id_paciente                              AS patientId,
+      u.nome                                     AS name,
+      u.email                                    AS email,
+      u.cpf                                      AS cpf,
+      COALESCE(u.telefone, '')                   AS phone,
+      DATE_FORMAT(p.data_nascimento, '%Y-%m-%d') AS birthDate,
+      p.cidade                                   AS city,
+      p.bairro                                   AS district,
+      p.historico_familiar                       AS familyHistory,
+      p.sintomas                                 AS symptoms
+    FROM usuarios u
+    JOIN pacientes p ON p.usuario_id = u.id
+    WHERE u.id = ?
+    LIMIT 1
+    `,
+    [userId],
+  );
+  return rows[0] ?? null;
+}
+
+export interface PatientProfileUpdate {
+  name: string;
+  email: string;
+  phone: string;
+  birthDate?: string | null;
+  city?: string | null;
+  district?: string | null;
+  familyHistory?: "sim" | "nao" | "nao_sei" | null;
+  symptoms?: string | null;
+}
+
+export async function savePatientProfile(
+  userId: number,
+  payload: PatientProfileUpdate,
+): Promise<PatientProfileRecord | null> {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    // Dados de pessoa: usuarios (CPF NUNCA é alterado aqui).
+    await conn.query(
+      `UPDATE usuarios SET nome = ?, email = ?, telefone = ? WHERE id = ?`,
+      [payload.name, payload.email, payload.phone || null, userId],
+    );
+    // Dados clínicos: pacientes.
+    await conn.query(
+      `UPDATE pacientes
+       SET data_nascimento = ?, cidade = ?, bairro = ?,
+           historico_familiar = ?, sintomas = ?
+       WHERE usuario_id = ?`,
+      [
+        payload.birthDate || null,
+        payload.city || null,
+        payload.district || null,
+        payload.familyHistory || null,
+        payload.symptoms || null,
+        userId,
+      ],
+    );
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+  return getPatientProfileByUserId(userId);
 }
 
 export function toManagedUsers(users: StoredUser[]): ManagedUser[] {
@@ -380,8 +484,148 @@ export async function saveVolunteerHours(hours: VolunteerHourEntry[]): Promise<V
   }
 }
 
-// AGENDA VOLUNTÁRIA 
+// AGENDA VOLUNTÁRIA
 export async function getVolunteerAgenda(): Promise<VolunteerAgendaItem[]> {
-  const [rows] = await pool.query<any[]>(`SELECT id, titulo AS title, DATE_FORMAT(data, '%Y-%m-%d') AS date, turno AS shift, local AS location FROM agenda_voluntarias ORDER BY data ASC`);
+  const [rows] = await pool.query<any[]>(`
+    SELECT
+      a.id,
+      a.titulo                          AS title,
+      a.descricao                       AS description,
+      DATE_FORMAT(a.data, '%Y-%m-%d')   AS date,
+      a.turno                           AS shift,
+      a.local                           AS location,
+      a.duracao_estimada                AS estimatedDuration,
+      COALESCE(a.status, 'aberta')      AS status,
+      a.voluntaria_id                   AS volunteerId,
+      u.nome                            AS volunteerName
+    FROM agenda_voluntarias a
+    LEFT JOIN usuarios u ON u.id = a.voluntaria_id
+    ORDER BY a.data ASC
+  `);
   return rows;
+}
+
+export async function createVolunteerAgendaItem(payload: {
+  title: string;
+  description?: string;
+  date: string;
+  shift: string;
+  location: string;
+  estimatedDuration?: string;
+}): Promise<VolunteerAgendaItem> {
+  const [result] = await pool.query<any>(
+    `INSERT INTO agenda_voluntarias
+       (titulo, descricao, data, turno, local, duracao_estimada, status)
+     VALUES (?, ?, ?, ?, ?, ?, 'aberta')`,
+    [
+      payload.title,
+      payload.description ?? null,
+      payload.date,
+      payload.shift,
+      payload.location,
+      payload.estimatedDuration ?? null,
+    ],
+  );
+  const id = result.insertId;
+  const all = await getVolunteerAgenda();
+  return all.find((item) => item.id === id) as VolunteerAgendaItem;
+}
+
+export async function updateVolunteerAgendaItem(
+  id: number,
+  payload: {
+    title: string;
+    description?: string;
+    date: string;
+    shift: string;
+    location: string;
+    estimatedDuration?: string;
+  },
+): Promise<VolunteerAgendaItem | null> {
+  await pool.query(
+    `UPDATE agenda_voluntarias
+       SET titulo = ?, descricao = ?, data = ?, turno = ?, local = ?, duracao_estimada = ?
+     WHERE id = ?`,
+    [
+      payload.title,
+      payload.description ?? null,
+      payload.date,
+      payload.shift,
+      payload.location,
+      payload.estimatedDuration ?? null,
+      id,
+    ],
+  );
+  const all = await getVolunteerAgenda();
+  return all.find((item) => item.id === id) ?? null;
+}
+
+export async function deleteVolunteerAgendaItem(id: number): Promise<void> {
+  await pool.query(`DELETE FROM agenda_voluntarias WHERE id = ?`, [id]);
+}
+
+export async function claimVolunteerAgendaItem(
+  id: number,
+  volunteerId: number,
+): Promise<VolunteerAgendaItem | null> {
+  // Atomic: só atribui se ainda estiver aberta (evita corrida de claim).
+  const [result] = await pool.query<any>(
+    `UPDATE agenda_voluntarias
+       SET voluntaria_id = ?, status = 'atribuida'
+     WHERE id = ? AND (voluntaria_id IS NULL OR voluntaria_id = ?)
+       AND status = 'aberta'`,
+    [volunteerId, id, volunteerId],
+  );
+  if (result.affectedRows === 0) {
+    return null; // já atribuída a outra voluntária
+  }
+  const all = await getVolunteerAgenda();
+  return all.find((item) => item.id === id) ?? null;
+}
+
+export async function getActiveVolunteerIds(): Promise<number[]> {
+  const [rows] = await pool.query<any[]>(
+    `SELECT id FROM usuarios WHERE tipo_usuario = 'voluntaria' AND status = 'Ativo'`,
+  );
+  return rows.map((r) => r.id as number);
+}
+
+export async function getActiveAdminIds(): Promise<number[]> {
+  const [rows] = await pool.query<any[]>(
+    `SELECT id FROM usuarios WHERE tipo_usuario = 'admin' AND status = 'Ativo'`,
+  );
+  return rows.map((r) => r.id as number);
+}
+
+export async function insertNotifications(
+  items: AppNotification[],
+): Promise<void> {
+  if (items.length === 0) return;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    for (const n of items) {
+      await conn.query(
+        `INSERT INTO notificacoes
+           (id, perfil_destinatario, destinatario_id, tipo, titulo, mensagem, data, lida)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          n.id,
+          n.recipientRole,
+          n.recipientId ?? null,
+          n.type,
+          n.title,
+          n.message,
+          toMysqlDatetime(n.date),
+          n.read ? 1 : 0,
+        ],
+      );
+    }
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }

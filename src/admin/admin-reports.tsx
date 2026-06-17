@@ -97,6 +97,24 @@ export function AdminReports() {
   const [donationSource, setDonationSource] =
     useState<DonationSourceFilter>("all");
 
+  // Hoje em ISO local (YYYY-MM-DD) — usado como teto dos filtros pra impedir
+  // recortes em datas futuras (relatórios são sempre históricos).
+  const todayIso = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }, []);
+
+  // Se um "Até" inválido ficar no estado (ex.: era >= "De" e o usuário muda "De"
+  // pra uma data posterior), zera. Mesmo raciocínio se "Até" estiver no futuro.
+  useEffect(() => {
+    if (range.to && range.from && range.to < range.from) {
+      setRange((current) => ({ ...current, to: undefined }));
+    }
+  }, [range.from, range.to]);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -222,7 +240,9 @@ export function AdminReports() {
     {
       header: "Valor",
       value: (row) =>
-        row.amount !== undefined ? row.amount.toFixed(2).replace(".", ",") : "",
+        typeof row.amount === "number"
+          ? row.amount.toFixed(2).replace(".", ",")
+          : "",
     },
     {
       header: "Item",
@@ -442,7 +462,8 @@ export function AdminReports() {
                   }))
                 }
                 fromYear={new Date().getFullYear() - 5}
-                toYear={new Date().getFullYear() + 1}
+                toYear={new Date().getFullYear()}
+                max={range.to ?? todayIso}
                 className="rounded-xl border-pink-200 bg-[var(--input-background)]"
               />
             </FilterField>
@@ -456,7 +477,9 @@ export function AdminReports() {
                   }))
                 }
                 fromYear={new Date().getFullYear() - 5}
-                toYear={new Date().getFullYear() + 1}
+                toYear={new Date().getFullYear()}
+                min={range.from}
+                max={todayIso}
                 className="rounded-xl border-pink-200 bg-[var(--input-background)]"
               />
             </FilterField>
