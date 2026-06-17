@@ -4,6 +4,7 @@ import type { FinancialDonationForm } from "./donation-types";
 import { formatPhoneBR } from "./phone-format";
 import { CurrencyInput } from "../ui/currency-input";
 import { Checkbox } from "../ui/checkbox";
+import qrCodePix from "../assets/qrCodePix.png";
 
 //substituir por dados reais
 const PIX_KEY = "ong@redefeminina.org.br";
@@ -86,14 +87,13 @@ export function FinancialDonation({
 
       {/* PIX Box */}
       <div className="rounded-2xl border border-pink-100 bg-pink-50/60 p-5 space-y-4">
-        {/* QR Code placeholder — substitua pela imagem real do QR Code da ONG */}
         <div className="flex justify-center">
-          <div className="flex h-36 w-36 items-center justify-center rounded-xl border-2 border-dashed border-pink-300 bg-white text-center">
-            <p className="text-xs text-pink-400 px-2 leading-relaxed">
-              QR Code PIX
-              <br />
-              <span className="text-gray-400">(inserir imagem)</span>
-            </p>
+          <div className="flex h-36 w-36 items-center justify-center rounded-xl border border-pink-200 bg-white p-2">
+            <img
+              src={qrCodePix}
+              alt="QR Code PIX da ONG"
+              className="h-full w-full object-contain"
+            />
           </div>
         </div>
 
