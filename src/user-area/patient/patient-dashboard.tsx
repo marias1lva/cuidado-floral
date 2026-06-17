@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bell, Calendar, FileText, Paperclip, Plus, Trash2 } from "lucide-react";
+import { Bell, Calendar, FileText, Paperclip, Plus, Trash2, Heart } from "lucide-react";
 
 import {
   buildAppointmentId,
@@ -14,6 +14,7 @@ import type { Appointment, AppNotification } from "../../domain/types";
 import type { ManagedUser } from "../../admin/types";
 import { PatientNotifications } from "./patient-notifications";
 import { PatientAppointmentsTimeline } from "./patient-appointments-timeline";
+import { PatientNetworkRegistration } from "./patient-network-registration";
 import { formatDateBR } from "./patient-utils";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
@@ -64,6 +65,7 @@ export function PatientDashboard({
   const [patientUser, setPatientUser] = useState<ManagedUser | null>(null);
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isNetworkRegistrationOpen, setIsNetworkRegistrationOpen] = useState(false);
   const [hasLoadedAppointments, setHasLoadedAppointments] = useState(false);
   const [hasLoadedNotifications, setHasLoadedNotifications] = useState(false);
   const patientName =
@@ -260,6 +262,24 @@ export function PatientDashboard({
         </DashboardCard>
 
         <DashboardCard
+          icon={<Heart className="h-5 w-5 text-pink-600" />}
+          title="Rede Feminina"
+        >
+          <div className="flex h-full flex-col justify-end">
+            <p className="mb-5 max-w-[260px] text-sm leading-relaxed text-[var(--muted-foreground)]">
+              Permita que uma nova paciente se cadastre na Rede Feminina e envie suas informações para análise.
+            </p>
+            <Button
+              className="h-11 w-full rounded-full bg-[var(--primary)] font-semibold text-white hover:bg-[var(--primary)]/90"
+              onClick={() => setIsNetworkRegistrationOpen(true)}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Cadastrar na Rede
+            </Button>
+          </div>
+        </DashboardCard>
+
+        <DashboardCard
           icon={
             <div className="relative">
               <Bell className="h-5 w-5 text-pink-600" />
@@ -303,6 +323,10 @@ export function PatientDashboard({
         onSave={handleSaveAppointment}
         patientName={patientName}
         patientId={patientId}
+      />
+      <PatientNetworkRegistration
+        open={isNetworkRegistrationOpen}
+        onClose={() => setIsNetworkRegistrationOpen(false)}
       />
     </div>
   );
