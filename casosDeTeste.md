@@ -1,56 +1,69 @@
 # Casos de Teste - Cuidado Floral
 
-Documento montado a partir da leitura do projeto em `src/` e `server/`.
+Documento atualizado a partir da leitura do projeto em `src/` e `server/`.
+Reflete o estado atual após a migração para MySQL, a inclusão de cadastro
+público, troca de senha, perfil consolidado da paciente, agenda das voluntárias
+com fluxo de claim e o painel admin com abas de Doações e Atividades.
 
 ## Premissas
 
-- Ambiente local com `npm run dev`.
-- API em `http://localhost:3001`.
-- Front-end em `http://localhost:5173`.
-- Base inicial restaurada com `npm run seed`, quando o caso exigir estado conhecido.
-- Contas demo:
-  - Admin: `admin@exemplo.com` / `123`
-  - Voluntária: `voluntario@exemplo.com` / `123`
-  - Paciente: `paciente@exemplo.com` / `123`
-  - Doador: `doador@exemplo.com` / `123`
+- Ambiente local com `npm run dev` (sobe API em `http://localhost:3001` e
+  front-end em `http://localhost:5173` via `concurrently`).
+- Banco MySQL (Railway ou local) configurado via `.env` (`MYSQL_URL` ou
+  variáveis `MYSQLHOST/MYSQLPORT/MYSQLUSER/MYSQLPASSWORD/MYSQLDATABASE`).
+- O servidor faz `testConnection()` no boot — falha de conexão impede subida.
+- Não existe mais `npm run seed` nem JSON store; dados de teste devem ser
+  inseridos diretamente no banco (tabelas: `usuarios`, `pacientes`, `doadores`,
+  `voluntarias`, `atendimentos`, `atendimento_anexos`, `doacoes`,
+  `notificacoes`, `horas_voluntarias`, `agenda_voluntarias`, `campanhas`,
+  `setores`).
+- Para os testes que exigem usuário logado, cadastre uma conta pelo próprio
+  fluxo de registro ou insira manualmente no banco com `senha_hash` gerado por
+  `bcrypt.hashSync("123", 10)`.
 
-## Autenticação e Sessão
+---
+
+## 1. Autenticação e Sessão
 
 ### CT-AUTH-001 - Login válido por perfil
 
-**Funções cobertas:** `loginWithDemoAccount`, `/api/auth/login`, `setAuthToken`, `App`
+**Funções cobertas:** `AuthScreen`, `loginWithDemoAccount`, `POST /api/auth/login`, `setAuthToken`, `App`
 
-**Pré-condições:** base seed carregada.
+**Pré-condições:** usuários ativos no banco para cada um dos perfis (admin,
+voluntária, paciente, doador).
 
 **Passos:**
 
-1. Abrir a tela inicial.
-2. Informar um e-mail demo válido.
-3. Informar senha `123`.
+1. Abrir a tela inicial em `/`.
+2. Selecionar a aba `Entrar`.
+3. Informar e-mail e senha válidos.
 4. Clicar em `Entrar`.
-5. Repetir para admin, voluntária, paciente e doador.
 
 **Resultado esperado:**
 
-- Login retorna `200` com `token`, `role` e `name`.
-- Token e role ficam em `localStorage`.
-- O app renderiza a área correta conforme o papel.
+- API responde `200` com `{ token, role, name }`.
+- Token persiste em `localStorage` na chave `cf:session-token`.
+- Role persiste em `localStorage` na chave `cf:session-role`.
+- O `App` renderiza a área correta:
+  - admin → `AdminArea`
+  - voluntaria → `VolunteerArea`
+  - paciente/doador → `UserArea`
 
 ### CT-AUTH-002 - Login com senha inválida
 
-**Funções cobertas:** `loginWithDemoAccount`, `/api/auth/login`, bcrypt compare
+**Funções cobertas:** `POST /api/auth/login`, `bcrypt.compareSync`
 
-**Dados:** `paciente@exemplo.com` / `senhaerrada`
+**Dados:** e-mail existente / senha errada.
 
 **Resultado esperado:**
 
 - API retorna `401`.
-- Tela mostra mensagem: `E-mail ou senha incorretos...`
-- Nenhum token fica salvo.
+- Mensagem exibida: `E-mail ou senha incorretos. Por favor, tente novamente.`
+- Nenhum token é salvo.
 
 ### CT-AUTH-003 - Login sem e-mail ou senha
 
-**Funções cobertas:** `/api/auth/login`
+**Funções cobertas:** `POST /api/auth/login`
 
 **Passos:** chamar API com body sem `email`, sem `password` ou ambos vazios.
 
@@ -59,834 +72,890 @@ Documento montado a partir da leitura do projeto em `src/` e `server/`.
 - API retorna `400`.
 - Mensagem: `Informe e-mail e senha.`
 
-### CT-AUTH-004 - Logout limpa sessão
+### CT-AUTH-004 - Login com usuário inativo
 
-**Funções cobertas:** `clearSession`, `setAuthToken`, `App.handleLogout`
+**Funções cobertas:** `POST /api/auth/login`
 
-**Passos:**
-
-1. Fazer login.
-2. Clicar em `Sair`.
+**Pré-condições:** usuário existente com `status = 'Inativo'`.
 
 **Resultado esperado:**
 
-- Role e token são removidos do `localStorage`.
-- Usuário volta para tela de login.
+- API retorna `401` com a mesma mensagem genérica de credenciais inválidas
+  (filtro `status = "Ativo"` na consulta de login).
 
-### CT-AUTH-005 - Token ausente em rota protegida
+### CT-AUTH-005 - Cadastro público válido
+
+**Funções cobertas:** `AuthScreen` (aba Cadastrar), `registerAccount`, `POST /api/auth/register`
+
+**Dados:** nome, e-mail novo, CPF novo (11 dígitos), senha, tipo
+(`paciente`, `doador` ou `voluntaria`).
+
+**Resultado esperado:**
+
+- Cria registro em `usuarios` (transação) e o registro auxiliar conforme tipo:
+  - paciente → `pacientes` com `id_paciente = pat-<id>`, `prioridade = 'media'`
+  - doador → `doadores` com `id_doador = doa-<id>`
+  - voluntaria → `voluntarias` com `id_voluntaria = vol-<id>`
+- Retorna `{ token, role, name }` e o usuário entra logado automaticamente.
+
+### CT-AUTH-006 - Cadastro com e-mail ou CPF duplicado
+
+**Funções cobertas:** `POST /api/auth/register`
+
+**Resultado esperado:**
+
+- API retorna `400` com mensagem `Este E-mail ou CPF já estão cadastrados.`
+- Nenhum registro é criado (rollback da transação).
+
+### CT-AUTH-007 - Cadastro com campos faltantes
+
+**Resultado esperado:**
+
+- API retorna `400` com `Preencha todos os campos obrigatórios.`
+
+### CT-AUTH-008 - Logout limpa sessão
+
+**Funções cobertas:** `clearSession`, `setAuthToken`, `App.handleLogout`
+
+**Resultado esperado:**
+
+- Remove `cf:session-token` e `cf:session-role` do `localStorage`.
+- App volta para `AuthScreen`.
+
+### CT-AUTH-009 - Token ausente em rota protegida
 
 **Funções cobertas:** hook `onRequest`, `requireRole`
 
 **Passos:** chamar `GET /api/appointments` sem `Authorization`.
 
-**Resultado esperado:**
+**Resultado esperado:** API retorna `401` com `Sessão expirada ou inválida.`
 
-- API retorna `401`.
-- Mensagem: `Sessão expirada ou inválida.`
-
-### CT-AUTH-006 - Papel sem permissão
+### CT-AUTH-010 - Papel sem permissão
 
 **Funções cobertas:** `requireRole`
 
-**Passos:**
+**Passos:** logar como paciente e chamar `GET /api/users` com seu token.
 
-1. Logar como paciente.
-2. Chamar `GET /api/users` com token da paciente.
+**Resultado esperado:** API retorna `403` com `Você não tem permissão para esta ação.`
 
-**Resultado esperado:**
-
-- API retorna `403`.
-- Mensagem: `Você não tem permissão para esta ação.`
-
-### CT-AUTH-007 - 401 no front força logout
+### CT-AUTH-011 - 401 no front força logout
 
 **Funções cobertas:** `apiRequest`, `onUnauthorized`, `App`
 
+**Passos:** alterar manualmente `cf:session-token` para valor inválido e
+disparar uma ação autenticada.
+
+**Resultado esperado:** `apiRequest` remove token, dispara handler de
+`onUnauthorized` e a aplicação retorna à tela de login.
+
+### CT-AUTH-012 - Troca de senha bem-sucedida
+
+**Funções cobertas:** `ChangePasswordButton`, `ChangePasswordModal`,
+`changePassword`, `POST /api/auth/change-password`, `updateUserPasswordHash`
+
 **Passos:**
 
-1. Fazer login.
-2. Alterar manualmente `cf:session-token` para valor inválido.
-3. Executar uma ação que chame API protegida.
+1. Estar logado (qualquer perfil).
+2. Clicar no botão `Senha` na navbar.
+3. Preencher senha atual válida, nova senha (≥ 6 caracteres) e confirmação.
 
 **Resultado esperado:**
 
-- `apiRequest` remove token.
-- Handler de `onUnauthorized` troca estado para não logado.
-- Tela volta para login.
+- Mensagem verde `Senha atualizada com sucesso.`
+- Novo `bcrypt` hash gravado em `usuarios.senha_hash`.
+- Login subsequente exige a nova senha.
 
-## API, Persistência e Store
+### CT-AUTH-013 - Troca de senha com senha atual incorreta
+
+**Resultado esperado:**
+
+- API retorna `401` com `Senha atual incorreta.`
+- Mensagem exibida no modal em vermelho.
+
+### CT-AUTH-014 - Troca de senha com nova senha curta
+
+**Resultado esperado:**
+
+- Validação front-end: `A nova senha deve ter ao menos 6 caracteres.`
+- API também valida (`400` com a mesma mensagem) caso o front seja burlado.
+
+### CT-AUTH-015 - Troca de senha com nova igual à atual
+
+**Resultado esperado:** mensagem `A nova senha deve ser diferente da atual.`
+(validada tanto no front quanto na API).
+
+### CT-AUTH-016 - Troca de senha com confirmação divergente
+
+**Resultado esperado:** validação front-end:
+`A confirmação não confere com a nova senha.`
+
+---
+
+## 2. API, Persistência (MySQL) e Conexão
 
 ### CT-API-001 - Health check
 
-**Funções cobertas:** `/api/health`
+**Resultado esperado:** `GET /api/health` retorna `{ "status": "ok" }`.
 
-**Passos:** chamar `GET /api/health`.
+### CT-DB-001 - Conexão MySQL no boot
 
-**Resultado esperado:** resposta `{ "status": "ok" }`.
+**Funções cobertas:** `testConnection`
 
-### CT-STORE-001 - Criação automática do arquivo de dados
+**Resultado esperado:** ao subir o servidor, log
+`✅ MySQL (Railway) conectado com sucesso.` ou falha rápida se variáveis de
+ambiente estiverem incorretas.
 
-**Funções cobertas:** `ensureDataFile`, `readStore`, `buildSeedData`
+### CT-DB-002 - Usuários sem hash exposto
 
-**Passos:**
-
-1. Remover temporariamente `server/data/app-data.json` em ambiente de teste.
-2. Chamar `readStore`.
-
-**Resultado esperado:**
-
-- Diretório `server/data` e arquivo `app-data.json` são recriados.
-- Conteúdo segue estrutura de `AppData`.
-
-### CT-STORE-002 - Escrita e leitura de store
-
-**Funções cobertas:** `writeStore`, `readStore`
-
-**Passos:**
-
-1. Ler store atual.
-2. Inserir item controlado em `patients`.
-3. Chamar `writeStore`.
-4. Chamar `readStore`.
-
-**Resultado esperado:** item inserido persiste no JSON.
-
-### CT-STORE-003 - Reset da base
-
-**Funções cobertas:** `resetStore`, `buildSeedData`
-
-**Passos:**
-
-1. Alterar dados locais.
-2. Rodar `npm run seed`.
-
-**Resultado esperado:** dados voltam ao seed original.
-
-### CT-STORE-004 - Usuários sem hash exposto
-
-**Funções cobertas:** `toManagedUsers`
-
-**Passos:** chamar `GET /api/users` como admin.
+**Funções cobertas:** `toManagedUsers`, `GET /api/users`
 
 **Resultado esperado:**
 
-- Lista contém `id`, `name`, `email`, `cpf`, `type`, `status`, `date`.
-- Não contém `passwordHash`.
+- Lista de usuários contém `id`, `name`, `email`, `cpf`, `type`, `status`, `date`.
+- Nenhum item contém `passwordHash`.
 
-## Utilitários de Domínio e API
+### CT-DB-003 - Conversão de datas para MySQL
 
-### CT-DOM-001 - `getAuthToken`
+**Funções cobertas:** `toMysqlDatetime`, `toIso`
 
-**Passos:** salvar `cf:session-token` no `localStorage` e chamar função.
+**Resultado esperado:** datas ISO (`YYYY-MM-DDTHH:MM:SS...Z`) são salvas no
+formato `YYYY-MM-DD HH:MM:SS`; ao serem lidas voltam como ISO 8601.
 
-**Resultado esperado:** retorna token salvo; retorna `null` sem window ou sem chave.
+### CT-DB-004 - Save em transação atômica
 
-### CT-DOM-002 - `setAuthToken`
-
-**Passos:**
-
-1. Chamar com string.
-2. Chamar com `null`.
+**Funções cobertas:** `saveUsers`, `saveAppointments`, `saveDonations`,
+`saveNotifications`, `saveVolunteerHours`
 
 **Resultado esperado:**
 
-- Com string, grava `cf:session-token`.
-- Com `null`, remove a chave.
+- Erro no meio do lote dispara `rollback`; nenhum registro fica
+  parcialmente gravado.
+- Para listas (atendimentos, doações, notificações, horas), itens não
+  presentes no payload final são apagados (`DELETE WHERE id NOT IN (...)`).
 
-### CT-DOM-003 - `apiRequest` adiciona Authorization
+---
 
-**Passos:** com token salvo, chamar rota protegida.
+## 3. Domínio (src/domain) e Utilitários
 
-**Resultado esperado:** request contém `Authorization: Bearer <token>`.
+### CT-DOM-001 - `getAuthToken` / `setAuthToken`
 
-### CT-DOM-004 - `apiRequest` trata erro com payload
+**Resultado esperado:**
 
-**Passos:** chamar rota protegida com papel sem permissão.
+- `setAuthToken("abc")` grava em `cf:session-token`.
+- `setAuthToken(null)` remove a chave.
+- `getAuthToken()` retorna o valor salvo ou `null` (também `null` em SSR).
 
-**Resultado esperado:** lança `Error` com mensagem do backend.
+### CT-DOM-002 - `apiRequest` adiciona Authorization
 
-### CT-DOM-005 - `buildAppointmentId`
+**Resultado esperado:** request envia `Authorization: Bearer <token>` quando há
+token salvo e `omitAuth` não foi pedido.
 
-**Resultado esperado:** ID com prefixo `apt-`; duas chamadas consecutivas geram valores diferentes.
+### CT-DOM-003 - `apiRequest` trata erro com payload
 
-### CT-DOM-006 - `buildNotificationId`
+**Resultado esperado:** lança `Error(message)` com a mensagem retornada pelo
+backend (ex.: `Você não tem permissão para esta ação.`).
 
-**Resultado esperado:** ID com prefixo `nt-`; duas chamadas consecutivas geram valores diferentes.
+### CT-DOM-004 - `apiRequest` 401 dispara `onUnauthorized`
 
-### CT-DOM-007 - `buildDonationId`
+**Resultado esperado:** em resposta `401` (fora de `suppressUnauthorizedHandler`)
+remove token, chama o handler registrado e lança
+`Sessão expirada. Faça login novamente.`
 
-**Resultado esperado:** ID com prefixo `don-`; duas chamadas consecutivas geram valores diferentes.
+### CT-DOM-005 - `getLoggedUser` decodifica o JWT
 
-### CT-DOM-008 - `buildDonationProtocol`
+**Resultado esperado:** com token válido, retorna `{ sub, role, name }`.
+Sem token ou com token malformado, retorna `null`.
 
-**Resultado esperado:** protocolo preenchido, rastreável e diferente a cada chamada.
+### CT-DOM-006 - `buildAppointmentId`
 
-### CT-DOM-009 - Load/save de pacientes
+**Resultado esperado:** prefixo `apt-` e duas chamadas geram IDs diferentes.
 
-**Funções cobertas:** `loadPatients`, `savePatients`, `/api/patients`
+### CT-DOM-007 - `buildNotificationId`
 
-**Passos:** logar como voluntária ou admin, carregar pacientes, salvar lista alterada.
+**Resultado esperado:** prefixo `nt-` e IDs únicos por chamada.
 
-**Resultado esperado:** dados persistem; paciente/doador sem permissão recebem `403`.
+### CT-DOM-008 - `buildDonationId`
 
-### CT-DOM-010 - Load/save de atendimentos
+**Resultado esperado:** prefixo `don-` e IDs únicos por chamada.
 
-**Funções cobertas:** `loadAppointments`, `saveAppointments`
+### CT-DOM-009 - `buildDonationProtocol`
 
-**Resultado esperado:** admin, voluntária e paciente acessam; doador não acessa.
+**Resultado esperado:** retorna protocolo rastreável (formato derivado do
+timestamp), diferente a cada chamada.
 
-### CT-DOM-011 - Load/save de notificações
+### CT-DOM-010 - Permissões dos loaders/savers
 
-**Funções cobertas:** `loadNotifications`, `saveNotifications`
+**Funções cobertas:** wrappers em `domain/patient-data`, `donor-data`,
+`patients-data`, `volunteer-data`, `admin-data`, `sectors-data`.
 
-**Resultado esperado:** todos podem listar; admin/voluntária/paciente podem salvar; doador não deve salvar.
+**Resultado esperado:** chamadas a endpoints protegidos por papel respeitam
+as regras (ver Seção 9). Wrappers do front apenas delegam para `apiRequest`.
 
-### CT-DOM-012 - Load/save de doações
+---
 
-**Funções cobertas:** `loadDonations`, `saveDonations`
-
-**Resultado esperado:** admin e doador acessam; paciente/voluntária recebem `403`.
-
-### CT-DOM-013 - Load de setores
-
-**Funções cobertas:** `loadSectors`, `/api/sectors`
-
-**Resultado esperado:** retorna setores cadastrados com `id`, `name`, `slug`, `description`.
-
-### CT-DOM-014 - Load/save de horas voluntárias
-
-**Funções cobertas:** `loadVolunteerHours`, `saveVolunteerHours`
-
-**Resultado esperado:** admin e voluntária acessam; paciente/doador recebem `403`.
-
-### CT-DOM-015 - Load agenda voluntária
-
-**Funções cobertas:** `loadVolunteerAgenda`
-
-**Resultado esperado:** admin e voluntária acessam agenda com data, turno e local.
-
-## Upload e Anexos
+## 4. Upload e Anexos
 
 ### CT-UP-001 - Upload sem arquivos
 
 **Funções cobertas:** `uploadAttachments`
 
-**Passos:** chamar `uploadAttachments([])`.
-
 **Resultado esperado:** retorna `[]` sem fazer request.
 
 ### CT-UP-002 - Upload de PDF válido
 
-**Funções cobertas:** `uploadAttachments`, `/api/uploads`, `safeFilename`, `makeUploadId`, `isAllowedAttachment`
-
-**Dados:** arquivo `.pdf` menor que 10 MB.
+**Funções cobertas:** `uploadAttachments`, `POST /api/uploads`, `safeFilename`,
+`makeUploadId`, `isAllowedAttachment`
 
 **Resultado esperado:**
 
-- API retorna array com `id`, `filename`, `mimeType`, `size`, `url`, `uploadedAt`.
-- Arquivo fica salvo em `server/data/uploads/<id>/<filename>`.
+- API responde com array `{ id, filename, mimeType, size, url, uploadedAt }`.
+- Arquivo salvo em `server/data/uploads/<id>/<filename>`.
 
 ### CT-UP-003 - Upload de JPG válido
 
-**Dados:** arquivo `.jpg` ou `.jpeg` menor que 10 MB.
+**Resultado esperado:** mesmo comportamento de CT-UP-002.
 
-**Resultado esperado:** upload aceito e anexo retornado.
+### CT-UP-004 - Upload de formato inválido (front)
 
-### CT-UP-004 - Upload de formato inválido no front
+**Funções cobertas:** validações no modal de solicitar atendimento (paciente).
 
-**Funções cobertas:** `PatientRequestAppointmentModal.handleAddFiles`
+**Resultado esperado:** arquivo `.txt`/`.docx`/`.png` não entra na lista;
+mensagem indica que só PDF ou JPG são aceitos.
 
-**Dados:** `.txt`, `.docx`, `.png`.
+### CT-UP-005 - Upload de formato inválido (API)
 
-**Resultado esperado:**
-
-- Arquivo não entra na lista.
-- Mensagem: `Formato inválido... Envie apenas PDF ou JPG.`
-
-### CT-UP-005 - Upload de formato inválido na API
-
-**Funções cobertas:** `isAllowedAttachment`, `/api/uploads`
-
-**Passos:** chamar API diretamente com `.txt`.
-
-**Resultado esperado:** API rejeita com erro de formato.
+**Resultado esperado:** API retorna `415` com
+`Formato não suportado em "<arquivo>". Envie apenas PDF ou JPG.`
 
 ### CT-UP-006 - Upload maior que 10 MB
 
-**Resultado esperado:** API retorna `413` e mensagem de limite excedido.
+**Resultado esperado:** API responde `413` com `Arquivo excede o limite de 10 MB.`
 
-### CT-UP-007 - Mais de 10 arquivos
+### CT-UP-007 - Mais de 10 arquivos por request
 
-**Resultado esperado:** request multipart excede limite e API retorna erro.
+**Resultado esperado:** request multipart estoura limite do plugin
+(`files: 10`) e retorna erro.
 
 ### CT-UP-008 - Nome de arquivo inseguro
 
-**Dados:** arquivo com nome `../../laudo câncer ?.pdf`.
+**Funções cobertas:** `safeFilename`
 
-**Resultado esperado:** `safeFilename` remove caracteres inseguros; arquivo salvo sem escapar de `uploads`.
+**Resultado esperado:** caracteres especiais são substituídos por `_` e nome
+final tem no máximo 120 caracteres. Não há escape para fora de `uploads/`.
 
 ### CT-UP-009 - `AppointmentAttachments` renderiza lista
 
-**Funções cobertas:** `AppointmentAttachments`, `formatFileSize`, `iconFor`
+**Funções cobertas:** `AppointmentAttachments` em
+`user-area/patient/appointment-attachments.tsx`.
 
-**Resultado esperado:**
+**Resultado esperado:** ícones diferentes para PDF e imagens, tamanho
+formatado em B/KB/MB.
 
-- PDF mostra ícone de arquivo.
-- JPG mostra ícone de imagem.
-- Tamanho aparece em B, KB ou MB conforme valor.
+---
 
-## Área da Paciente
+## 5. Área da Paciente
 
 ### CT-PAC-001 - Carregamento do dashboard
 
-**Funções cobertas:** `PatientDashboard`
-
-**Passos:** login como paciente.
-
-**Resultado esperado:**
-
-- Carrega atendimentos e notificações da API.
-- Exibe cards de cadastro, atendimentos e notificações.
-- Lista somente atendimentos da paciente demo.
-
-### CT-PAC-002 - Contagem de atendimentos
-
-**Funções cobertas:** `completedCount`, `scheduledCount`, `nextAppointment`
-
-**Dados:** atendimentos com status `agendado`, `em_andamento`, `concluido`, `cancelado`.
+**Funções cobertas:** `PatientDashboard`, `loadAppointments`,
+`loadNotifications`, `loadPatientProfile`.
 
 **Resultado esperado:**
 
-- `scheduledCount` conta apenas `agendado` e `em_andamento`.
-- `completedCount` conta apenas `concluido`.
-- próximo atendimento é o menor `date` entre agendados/em andamento.
+- Carrega `Appointment[]`, `AppNotification[]` e `PatientProfile` da API.
+- Exibe seções de perfil, atendimentos e notificações.
 
-### CT-PAC-003 - Filtragem de notificações
+### CT-PAC-002 - Perfil consolidado da paciente (GET)
 
-**Funções cobertas:** `patientNotifications`
-
-**Dados:** notificações globais para paciente e específicas para outro `recipientId`.
-
-**Resultado esperado:** aparecem notificações sem `recipientId` ou com `recipientId` da paciente demo.
-
-### CT-PAC-004 - Marcar uma notificação como lida
-
-**Funções cobertas:** `handleMarkAsRead`, `saveNotifications`
-
-**Passos:** clicar em `Marcar como lida`.
+**Funções cobertas:** `GET /api/patients/profile`, `getPatientProfileByUserId`.
 
 **Resultado esperado:**
 
-- Somente a notificação escolhida vira `read: true`.
-- Contador de não lidas diminui.
-- Alteração persiste na API.
+- Paciente: retorna o próprio perfil (ignora `userId` da query).
+- Admin/voluntária: aceita `?userId=<n>` e retorna o perfil correspondente.
+- Sem `userId` retorna `400`; perfil inexistente retorna `404`.
 
-### CT-PAC-005 - Marcar todas como lidas
+### CT-PAC-003 - Edição do perfil (PUT)
 
-**Funções cobertas:** `handleMarkAllAsRead`
+**Funções cobertas:** `PUT /api/patients/profile`, `savePatientProfile`.
 
-**Resultado esperado:** todas notificações ficam `read: true`.
-
-### CT-PAC-006 - Abrir/fechar modal solicitar atendimento
-
-**Funções cobertas:** `PatientRequestAppointmentModal`, `handleClose`, `resetForm`
-
-**Passos:**
-
-1. Clicar `Solicitar Atendimento`.
-2. Preencher campos.
-3. Clicar `Cancelar`.
-4. Abrir novamente.
-
-**Resultado esperado:** formulário abre limpo.
-
-### CT-PAC-007 - Solicitar atendimento sem data ou hora
-
-**Resultado esperado:** HTML required impede envio; nenhum atendimento é criado.
-
-### CT-PAC-008 - Solicitar atendimento sem anexos
-
-**Dados:** data `2026-06-10`, hora `14:00`, tipo `Sessão de psicologia`.
+**Dados:** name, email, phone (obrigatórios); birthDate, city, district,
+familyHistory (`sim` | `nao` | `nao_sei`) e symptoms (opcionais).
 
 **Resultado esperado:**
 
-- Cria atendimento com status `agendado`.
-- `createdBy: "paciente"`.
+- Atualiza `usuarios.nome/email/telefone` e `pacientes.data_nascimento/cidade/
+  bairro/historico_familiar/sintomas`.
+- CPF nunca é alterado.
+- Falta de name/email/phone retorna `400` com mensagem
+  `Nome, e-mail e telefone são obrigatórios.`
+- Paciente só edita o próprio perfil; admin pode editar passando `userId`
+  no body.
+
+### CT-PAC-004 - Solicitar novo atendimento (modal)
+
+**Funções cobertas:** modal de solicitação no `PatientDashboard`,
+`uploadAttachments`, `saveAppointments`.
+
+**Resultado esperado:**
+
+- DatePicker e TimePicker selecionam data/hora (`required`).
+- Sem data/hora, o submit é bloqueado pelo `required` do HTML.
+- Anexos PDF/JPG são enviados via `/api/uploads` antes do save.
+- Falha no upload mantém o modal aberto e exibe mensagem de erro.
+
+### CT-PAC-005 - Atendimento sem anexos
+
+**Resultado esperado:**
+
+- Cria atendimento com `status = "agendado"`, `createdBy = "paciente"`.
 - `attachments` fica `undefined`.
-- Modal fecha e atendimento aparece na timeline.
 
-### CT-PAC-009 - Solicitar atendimento com PDF
-
-**Resultado esperado:**
-
-- Upload é feito com token.
-- Atendimento criado contém `attachments`.
-- Timeline mostra anexo.
-
-### CT-PAC-010 - Erro no upload
-
-**Passos:** invalidar token antes de enviar com anexo.
+### CT-PAC-006 - Atendimento com PDF
 
 **Resultado esperado:**
 
-- Modal permanece aberto.
-- Mostra mensagem `Sessão expirada...` ou erro retornado.
-- Nenhum atendimento novo é salvo.
+- Upload retorna metadados que são associados ao atendimento.
+- A timeline mostra os anexos com `AppointmentAttachments`.
 
-### CT-PAC-011 - Remover arquivo antes de enviar
+### CT-PAC-007 - Filtragem de notificações
 
-**Funções cobertas:** `handleRemoveFile`
+**Funções cobertas:** filtro em `UserArea` / `PatientDashboard`.
 
-**Resultado esperado:** arquivo removido da lista; upload não envia esse arquivo.
+**Resultado esperado:** aparecem notificações com `recipientRole = "paciente"`
+e sem `recipientId` (broadcast) ou com `recipientId` igual ao
+`pat-<sub>` do logado.
 
-### CT-PAC-012 - Timeline de atendimentos vazia
+### CT-PAC-008 - Marcar notificação como lida
 
-**Funções cobertas:** `PatientAppointmentsTimeline`
+**Resultado esperado:**
 
-**Dados:** lista vazia.
+- Notificação selecionada vira `read: true`.
+- Contador de não-lidas diminui.
+- Alteração persiste via `PUT /api/notifications`.
 
-**Resultado esperado:** mostra estado vazio sem quebrar layout.
+### CT-PAC-009 - Marcar todas como lidas
 
-### CT-PAC-013 - Timeline com anexos
+**Resultado esperado:** todas as notificações da paciente atual viram
+`read: true`. Notificações para outros perfis permanecem inalteradas.
 
-**Resultado esperado:** exibe data, status, observações, encaminhamento e componente de anexos.
+### CT-PAC-010 - Contagem de atendimentos
 
-## Histórico de Paciente
+**Resultado esperado:**
 
-### CT-HIST-001 - Abrir histórico pela voluntária
+- `agendado` + `em_andamento` contam como agendados.
+- `concluido` conta como concluído.
+- Próximo atendimento é o de menor `date` entre agendados/em andamento.
 
-**Funções cobertas:** `PatientHistoryModal`
+### CT-PAC-011 - Timeline de atendimentos
 
-**Passos:** login voluntária, clicar `Histórico`.
+**Funções cobertas:** `PatientAppointmentsTimeline`.
 
-**Resultado esperado:** modal abre com paciente correto e atendimentos vinculados.
+**Resultado esperado:**
+
+- Sem atendimentos: exibe estado vazio sem quebrar layout.
+- Com itens: mostra data, status, observações, encaminhamento e anexos.
+
+---
+
+## 6. Histórico de Paciente (visão Voluntária)
+
+### CT-HIST-001 - Abrir histórico
+
+**Funções cobertas:** `PatientHistoryModal`.
+
+**Resultado esperado:** modal abre filtrando atendimentos pela paciente
+selecionada na lista.
 
 ### CT-HIST-002 - Criar atendimento no histórico
 
-**Funções cobertas:** `PatientHistoryForm`, `todayISO`, `buildInitialState`, `handleSaveAppointment`
+**Funções cobertas:** `PatientHistoryForm`, `handleSaveAppointment`.
 
-**Dados:** data hoje, observações preenchidas, encaminhamento opcional.
-
-**Resultado esperado:** novo atendimento é adicionado no início da lista e persistido.
+**Resultado esperado:** novo atendimento é adicionado no topo da lista e
+persiste após `PUT /api/appointments`.
 
 ### CT-HIST-003 - Validação sem data
 
-**Resultado esperado:** mensagem `Informe a data do atendimento.`
+**Resultado esperado:** `Informe a data do atendimento.`
 
 ### CT-HIST-004 - Validação sem observações
 
-**Resultado esperado:** mensagem `Adicione observações sobre o atendimento.`
+**Resultado esperado:** `Adicione observações sobre o atendimento.`
 
 ### CT-HIST-005 - Editar atendimento existente
 
 **Resultado esperado:**
 
-- `id` e `createdAt` permanecem.
-- `updatedAt` muda.
-- Campos alterados aparecem na timeline.
+- `id` e `createdAt` preservados.
+- `updatedAt` é atualizado.
+- Campos alterados aparecem na timeline e no banco.
 
 ### CT-HIST-006 - Excluir atendimento
 
-**Resultado esperado:** atendimento desaparece da lista e persiste na API.
+**Resultado esperado:** registro some da lista e da tabela `atendimentos`
+(remoção feita pelo `DELETE WHERE id NOT IN (...)` do save).
 
 ### CT-HIST-007 - Encaminhamento "Sem encaminhamento"
 
-**Resultado esperado:** `encaminhamento: null` e `encaminhamentoDetalhe` fica `undefined`.
+**Resultado esperado:** `encaminhamento: null` e `encaminhamentoDetalhe`
+permanece `undefined`/`null`.
 
-## Área da Voluntária
+---
+
+## 7. Área da Voluntária
 
 ### CT-VOL-001 - Carregamento da área
 
-**Funções cobertas:** `VolunteerArea`
+**Funções cobertas:** `VolunteerArea`, `loadPatients`, `loadAppointments`,
+`loadNotifications`, `loadSectors`, `loadVolunteerHours`,
+`loadVolunteerAgenda`.
 
-**Resultado esperado:**
-
-- Carrega pacientes, atendimentos, notificações, setores, horas e agenda.
-- Cards de pendentes, encaminhados e concluídos exibem totais corretos.
+**Resultado esperado:** todas as listas carregam e os cards de pendentes,
+encaminhados e concluídos exibem os totais corretos.
 
 ### CT-VOL-002 - Busca por nome de paciente
 
-**Resultado esperado:** filtro ignora maiúsculas/minúsculas e retorna somente nomes compatíveis.
+**Resultado esperado:** filtro ignora maiúsculas/minúsculas e retorna apenas
+pacientes com nome compatível.
 
 ### CT-VOL-003 - Filtro por status
 
-**Resultado esperado:** `all` mostra todos; `pendente`, `encaminhado`, `concluido` mostram apenas o status selecionado.
+**Resultado esperado:** `all` mostra todas; `pendente`, `encaminhado` e
+`concluido` filtram corretamente.
 
-### CT-VOL-004 - Badge de status
+### CT-VOL-004 - `StatusBadge` / `PriorityBadge`
 
-**Funções cobertas:** `StatusBadge`
+**Resultado esperado:** cada status/prioridade usa label e cor previstos
+(pendente/encaminhado/concluido; alta/média/baixa).
 
-**Resultado esperado:** cada status usa label e classe corretas.
+### CT-VOL-005 - Encaminhar paciente
 
-### CT-VOL-005 - Badge de prioridade
-
-**Funções cobertas:** `PriorityBadge`
-
-**Resultado esperado:** alta, média e baixa usam label e classe corretas.
-
-### CT-VOL-006 - Contagem de atendimentos por paciente
-
-**Funções cobertas:** `appointmentsByPatient`
-
-**Resultado esperado:** cada card mostra singular/plural corretamente.
-
-### CT-VOL-007 - Abrir encaminhamento
-
-**Funções cobertas:** `handleStartForward`, `ForwardPatientModal`
-
-**Resultado esperado:** modal abre para paciente selecionada.
-
-### CT-VOL-008 - Encaminhar sem setor
-
-**Funções cobertas:** `ForwardPatientModal.handleSubmit`
-
-**Resultado esperado:** mensagem `Selecione um setor cadastrado...`; nada é salvo.
-
-### CT-VOL-009 - Encaminhar com setor e observação
-
-**Funções cobertas:** `handleConfirmForward`
+**Funções cobertas:** `ForwardPatientModal`, `handleConfirmForward`,
+`saveAppointments`, `saveNotifications`.
 
 **Resultado esperado:**
 
-- Paciente muda para `encaminhado`.
-- Novo atendimento com status `encaminhado` e `createdBy: "voluntaria"` é criado.
-- Nova notificação `read: false` é criada para a paciente.
-- Dados persistem.
+- Sem setor selecionado: mensagem `Selecione um setor cadastrado...`
+- Com setor: paciente vai para `encaminhado`, cria atendimento com
+  `status = "encaminhado"` e `createdBy = "voluntaria"` e dispara notificação
+  `read: false` para a paciente.
 
-### CT-VOL-010 - Encaminhar com setor sem observação
+### CT-VOL-006 - Concluir paciente encaminhada
 
-**Resultado esperado:** detalhe e mensagem usam apenas nome do setor; sem espaços ou pontuação duplicada.
+**Funções cobertas:** `handleComplete`.
 
-### CT-VOL-011 - Concluir paciente encaminhada
+**Resultado esperado:** paciente passa para `concluido` e o botão de concluir
+some.
 
-**Funções cobertas:** `handleComplete`
+### CT-VOL-007 - Salvar/excluir atendimento
 
-**Resultado esperado:** paciente muda para `concluido`; botão de concluir some.
+**Funções cobertas:** `handleSaveAppointment`, `handleDeleteAppointment`.
 
-### CT-VOL-012 - Salvar atendimento existente
+**Resultado esperado:** atendimento novo entra no topo, edição preserva `id` e
+exclusão remove via `saveAppointments`.
 
-**Funções cobertas:** `handleSaveAppointment`
+### CT-VOL-008 - Alternar abas
 
-**Resultado esperado:** se `id` existe, substitui item; se não existe, adiciona no início.
+**Funções cobertas:** `VolunteerAreaTabs`.
 
-### CT-VOL-013 - Excluir atendimento
+**Resultado esperado:** aba `pacientes` mostra a lista; aba `horas` mostra
+`VolunteerAgenda` + `VolunteerHoursList`.
 
-**Funções cobertas:** `handleDeleteAppointment`
+### CT-VOL-009 - Sino de notificações da voluntária
 
-**Resultado esperado:** atendimento removido do estado e da API.
+**Resultado esperado:** mostra apenas notificações com
+`recipientRole = "voluntaria"` e (broadcast ou `vol-<sub>` da logada);
+marcar como lida persiste via `PUT /api/notifications`.
 
-### CT-VOL-014 - Alternar abas
+---
 
-**Funções cobertas:** `VolunteerAreaTabs`
-
-**Resultado esperado:** aba pacientes mostra lista; aba horas mostra agenda e registros.
-
-## Horas de Voluntariado
+## 8. Horas de Voluntariado e Agenda
 
 ### CT-HOR-001 - Abrir modal de horas
 
-**Funções cobertas:** `VolunteerHoursModal`
+**Funções cobertas:** `VolunteerHoursModal`.
 
-**Passos:** na aba horas, clicar `Cadastrar horas de voluntariado`.
-
-**Resultado esperado:** modal abre com campos vazios e categoria padrão.
+**Resultado esperado:** modal abre com formulário vazio e categoria padrão
+`acolhimento`.
 
 ### CT-HOR-002 - Validação de atividade obrigatória
 
-**Resultado esperado:** mensagem `Informe a atividade realizada.`
+**Resultado esperado:** `Informe a atividade realizada.`
 
 ### CT-HOR-003 - Validação de data obrigatória
 
-**Resultado esperado:** mensagem `Selecione a data da atividade.`
+**Resultado esperado:** `Selecione a data da atividade.`
 
 ### CT-HOR-004 - Validação de horas obrigatórias
 
-**Resultado esperado:** mensagem `Informe a quantidade de horas.`
+**Resultado esperado:** `Informe a quantidade de horas.`
 
 ### CT-HOR-005 - Horas zero, negativa ou texto
 
-**Resultado esperado:** mensagem `As horas devem ser maiores que zero.`
+**Resultado esperado:** `As horas devem ser maiores que zero.`
 
 ### CT-HOR-006 - Horas acima de 24
 
-**Resultado esperado:** mensagem `Use um valor coerente de até 24 horas.`
+**Resultado esperado:** `Use um valor coerente de até 24 horas.`
 
 ### CT-HOR-007 - Local obrigatório
 
-**Resultado esperado:** mensagem `Informe o local da atividade.`
+**Resultado esperado:** `Informe o local da atividade.`
 
 ### CT-HOR-008 - Cadastro válido de horas
 
-**Dados:** atividade `Acolhimento`, data válida, horas `3.5`, local `Sede`.
+**Funções cobertas:** `VolunteerHoursModal.handleSubmit`, `saveVolunteerHours`.
 
 **Resultado esperado:**
 
-- Cria item com `volunteerId`, `volunteerName`, `createdAt`.
+- Cria entrada com `volunteerId`, `volunteerName`, `createdAt`.
 - Lista ordena por data decrescente.
-- Total acumulado atualiza.
+- Total acumulado é atualizado.
 
 ### CT-HOR-009 - Reset ao fechar modal
 
-**Resultado esperado:** ao cancelar e reabrir, campos e erros estão limpos.
+**Resultado esperado:** ao cancelar e reabrir, todos os campos e erros voltam
+ao estado inicial.
 
-### CT-HOR-010 - `VolunteerHoursList` vazia
+### CT-HOR-010 - `VolunteerHoursList` vazia / com registros
 
-**Resultado esperado:** mostra estado sem registros.
+**Resultado esperado:** estado vazio quando não há registros; com itens,
+exibe data formatada, categoria traduzida, horas, local e observações.
 
-### CT-HOR-011 - `VolunteerHoursList` com registros
+### CT-AGE-001 - `VolunteerAgenda` vazia / com itens
 
-**Resultado esperado:** exibe data formatada, categoria traduzida, horas e observações.
+**Funções cobertas:** `VolunteerAgenda` (em `volunteer-hours/volunteer-agenda.tsx`).
 
-### CT-HOR-012 - `VolunteerAgenda` vazia
+**Resultado esperado:** sem compromissos exibe estado vazio; com itens mostra
+data, turno, título, local e (se atribuída) nome da voluntária.
 
-**Resultado esperado:** mostra estado sem compromissos.
+### CT-AGE-002 - Voluntária pega atividade aberta (claim)
 
-### CT-HOR-013 - `VolunteerAgenda` com itens
+**Funções cobertas:** `claimVolunteerAgendaItem`, `POST /api/volunteer-agenda/:id/claim`,
+`insertNotifications`, `getActiveAdminIds`.
 
-**Resultado esperado:** exibe data, turno, título e local.
+**Pré-condições:** atividade com `status = "aberta"`.
 
-## Área Administrativa
+**Resultado esperado:**
+
+- `UPDATE` atômico exige `status = 'aberta'`; só atribui se ainda estava
+  aberta (evita corrida).
+- Atividade passa para `status = "atribuida"` com `voluntaria_id` preenchido.
+- Notificação `recipientRole = "admin"` é criada para cada admin ativo, com
+  título `Atividade atribuída` e mensagem citando a voluntária.
+
+### CT-AGE-003 - Claim em atividade já atribuída
+
+**Resultado esperado:** API retorna `409` com
+`Atividade já foi atribuída a outra voluntária.`
+
+---
+
+## 9. Área Administrativa
 
 ### CT-ADM-001 - Carregamento do painel
 
-**Funções cobertas:** `AdminArea`, `loadManagedUsers`, `loadCampaigns`
+**Funções cobertas:** `AdminArea`, `loadManagedUsers`, `loadCampaigns`,
+`loadNotifications`.
 
-**Resultado esperado:** cards exibem totais de pacientes, voluntárias, doadores e campanhas.
+**Resultado esperado:** cards exibem totais de pacientes, voluntárias e
+doadores **ativos**, além do total de campanhas e quantas estão ativas.
 
-### CT-ADM-002 - Criar usuário válido
+### CT-ADM-002 - Sino de notificações do admin
 
-**Funções cobertas:** `AdminUserModal`, `handleSaveUser`, `getTodayDateLabel`
+**Resultado esperado:**
 
-**Dados:** nome, e-mail válido, CPF com 11 dígitos, tipo `paciente`.
+- Lista somente notificações com `recipientRole = "admin"`.
+- Badge mostra a quantidade não-lida; `9+` quando passa de 9.
+- `Marcar tudo` marca todas as notificações de admin como `read: true`.
+
+### CT-ADM-003 - Criar usuário válido
+
+**Funções cobertas:** `AdminUserModal`, `handleSaveUser`, `saveManagedUsers`,
+`PUT /api/users`.
+
+**Dados:** nome, e-mail válido, CPF (11 dígitos), tipo, senha (≥ 6 caracteres).
 
 **Resultado esperado:**
 
 - Usuário aparece no topo da lista.
-- Status `Ativo`.
-- Data de cadastro e data atual em pt-BR.
-- API salva usuário com senha padrão hash de `123`.
+- `status = "Ativo"`, `date = hoje (pt-BR)`.
+- Senha enviada vai como `password` no payload e é hasheada no backend; o
+  state local não guarda senha após o save.
+- ID gerado a partir de `Math.floor(Date.now() / 1000)` para evitar estouro
+  de `INT` no MySQL.
 
-### CT-ADM-003 - Editar usuário existente
+### CT-ADM-004 - Editar usuário existente
 
-**Resultado esperado:** mantém `id`, `status` e `date`; atualiza nome/e-mail/CPF/tipo.
+**Resultado esperado:** preserva `id`, `status` e `date`. Atualiza
+nome/e-mail/CPF/tipo. **Senha nunca é alterada na edição** (campo nem é
+exibido).
 
-### CT-ADM-004 - Inativar usuário
+### CT-ADM-005 - Inativar usuário
 
-**Funções cobertas:** `handleInactivateUser`
+**Funções cobertas:** `handleInactivateUser`.
 
-**Resultado esperado:** status vira `Inativo`; botão de inativar fica desabilitado.
+**Resultado esperado:** `status` vira `Inativo` e o botão de inativar é
+desabilitado. Usuário inativo deixa de aparecer no login.
 
-### CT-ADM-005 - Validar nome obrigatório
+### CT-ADM-006 - Validações do modal de usuário
 
-**Resultado esperado:** mensagem `Informe o nome do usuário.`
+**Funções cobertas:** `AdminUserModal.validateForm`.
 
-### CT-ADM-006 - Validar e-mail obrigatório
+**Resultado esperado:**
 
-**Resultado esperado:** mensagem `Informe o e-mail.`
+- Nome vazio → `Informe o nome do usuário.`
+- E-mail vazio → `Informe o e-mail.`
+- E-mail malformado → `Informe um e-mail válido.`
+- CPF vazio → `Informe o CPF.`
+- CPF com menos de 11 dígitos → `CPF deve conter 11 dígitos.`
+- E-mail duplicado → `Já existe um usuário com este e-mail.`
+- CPF duplicado → `Já existe um usuário com este CPF.`
+- Novo usuário sem senha de ao menos 6 caracteres →
+  `Senha deve ter ao menos 6 caracteres.`
 
-### CT-ADM-007 - Validar e-mail inválido
+### CT-ADM-007 - Exportar usuários CSV
 
-**Resultado esperado:** mensagem `Informe um e-mail válido.`
+**Funções cobertas:** `handleExportUsersCsv`, `buildCsv`, `downloadCsv`.
 
-### CT-ADM-008 - Validar CPF obrigatório
+**Resultado esperado:** arquivo `usuarios-YYYY-MM-DD.csv` com colunas
+Nome, E-mail, CPF, Tipo, Status, Data de cadastro (separador `;`, BOM UTF-8).
 
-**Resultado esperado:** mensagem `Informe o CPF.`
+### CT-ADM-008 - Exportar usuários PDF
 
-### CT-ADM-009 - Validar CPF com menos de 11 dígitos
+**Funções cobertas:** `handleExportUsersPdf`, `downloadPdfReport`.
 
-**Funções cobertas:** `normalizeCpf`, `formatCpf`
+**Resultado esperado:** PDF contém título `Relatório de Usuários`, resumo
+(Total, Ativos, Pacientes, Voluntárias, Doadores) e tabela completa.
 
-**Resultado esperado:** mensagem `CPF deve conter 11 dígitos.`
+### CT-ADM-009 - Aba campanhas
 
-### CT-ADM-010 - Validar e-mail duplicado
+**Funções cobertas:** `loadCampaigns`.
 
-**Resultado esperado:** mensagem `Já existe um usuário com este e-mail.`
+**Resultado esperado:** mostra `<n> campanhas cadastradas e <m> doações
+registradas.` (a aba é apenas informativa por enquanto, sem CRUD).
 
-### CT-ADM-011 - Validar CPF duplicado
+### CT-ADM-010 - Aba doações (filtros e listagem)
 
-**Resultado esperado:** mensagem `Já existe um usuário com este CPF.`
+**Funções cobertas:** `AdminDonations`.
 
-### CT-ADM-012 - Exportar usuários CSV
+**Resultado esperado:**
 
-**Funções cobertas:** `handleExportUsersCsv`, `buildCsv`, `downloadCsv`
+- Carrega via `loadDonations`, ordena por `date` desc.
+- Filtros: status (default `pendente`), kind (financeira/material), source
+  (titular/terceiro).
+- Cards de resumo: Aguardando confirmação, Confirmadas, Total financeiro
+  confirmado (formatado em BRL), Materiais confirmados.
 
-**Resultado esperado:** arquivo `usuarios-YYYY-MM-DD.csv` contém colunas Nome, E-mail, CPF, Tipo, Status e Data.
+### CT-ADM-011 - Confirmar doação pendente
 
-### CT-ADM-013 - Exportar usuários PDF
+**Funções cobertas:** `AdminDonations.updateStatus`, `saveDonations`.
 
-**Funções cobertas:** `handleExportUsersPdf`, `downloadPdfReport`
+**Resultado esperado:**
 
-**Resultado esperado:** PDF contém título `Relatório de Usuários`, resumo e tabela de usuários.
+- Doação passa para `confirmada`.
+- Botões de Confirmar/Cancelar somem (linha não-pendente).
+- Indicador `Salvando…` aparece durante o request.
 
-### CT-ADM-014 - Aba campanhas
+### CT-ADM-012 - Cancelar doação pendente
 
-**Resultado esperado:** mostra quantidade de campanhas cadastradas e total de doações vinculadas.
+**Resultado esperado:** mesma mecânica, status final `cancelada`.
 
-### CT-ADM-015 - Alternar abas admin
+### CT-ADM-013 - Expandir detalhes da doação
 
-**Funções cobertas:** `TabButton`
+**Resultado esperado:**
 
-**Resultado esperado:** botão ativo muda estilo e conteúdo renderizado muda.
+- Expansor mostra dados completos: doador, perfil utilizado, telefone, data,
+  tipo, origem, valor (financeira) ou item/quantidade/entrega/descrição
+  (material), campanha, observações e protocolo (quando houver).
+- Quando `donorSource = "terceiro"`, mostra `Nome do terceiro` e
+  `Telefone do terceiro`.
 
-## Relatórios
+### CT-ADM-014 - Aba atividades — listagem
+
+**Funções cobertas:** `AdminActivities`, `loadVolunteerAgenda`.
+
+**Resultado esperado:**
+
+- Carrega itens da agenda.
+- Estado vazio: mensagem incentivando criar a primeira atividade.
+- Itens são ordenados por data ascendente.
+
+### CT-ADM-015 - Aba atividades — criar atividade e broadcast
+
+**Funções cobertas:** `ActivityFormModal`, `createVolunteerAgendaItem`,
+`POST /api/volunteer-agenda`, `getActiveVolunteerIds`,
+`insertNotifications`.
+
+**Dados:** título, data, turno, local (obrigatórios); descrição e duração
+opcionais.
+
+**Resultado esperado:**
+
+- Atividade criada com `status = "aberta"`.
+- Para cada voluntária ativa, gera notificação
+  `recipientRole = "voluntaria"`, `recipientId = vol-<id>` com título
+  `Nova atividade disponível`.
+- Validação no backend: título, data, turno e local obrigatórios; falta
+  qualquer um → `400` com `Título, data, turno e local são obrigatórios.`
+- Validação no front: `Preencha título, data, turno e local.`
+
+### CT-ADM-016 - Editar atividade
+
+**Funções cobertas:** `updateVolunteerAgendaItem`,
+`PUT /api/volunteer-agenda/:id`.
+
+**Resultado esperado:** atualiza título, descrição, data, turno, local e
+duração estimada; mantém `status` e `voluntaria_id`.
+
+### CT-ADM-017 - Excluir atividade
+
+**Funções cobertas:** `deleteVolunteerAgendaItem`,
+`DELETE /api/volunteer-agenda/:id`.
+
+**Resultado esperado:** confirmação inline (`Excluir esta atividade?`) →
+`Excluir` remove a atividade; `Cancelar` mantém.
+
+### CT-ADM-018 - Alternar abas admin
+
+**Funções cobertas:** `TabButton`.
+
+**Resultado esperado:** trocar entre `users`, `donations`, `activities` e
+`reports` muda estilo do botão ativo e conteúdo renderizado. (A aba
+`campaigns` existe no tipo `AdminTab`, mas não há botão visível no grid
+de 5 colunas — só é renderizada se acionada por código.)
+
+---
+
+## 10. Relatórios (`admin/admin-reports.tsx` e `domain/reports.ts`)
 
 ### CT-REL-001 - `isWithinRange` sem filtro
 
-**Resultado esperado:** retorna `true` para qualquer data válida.
+**Resultado esperado:** sempre `true` para datas válidas.
 
-### CT-REL-002 - `isWithinRange` com início
+### CT-REL-002 - `isWithinRange` com `from`
 
-**Dados:** range `{ from: "2026-05-01" }`.
+**Resultado esperado:** datas antes de `from` retornam `false`; iguais ou
+posteriores retornam `true`.
 
-**Resultado esperado:** datas antes de 2026-05-01 retornam `false`; iguais/depois retornam `true`.
+### CT-REL-003 - `isWithinRange` com `to`
 
-### CT-REL-003 - `isWithinRange` com fim
-
-**Dados:** range `{ to: "2026-05-31" }`.
-
-**Resultado esperado:** datas até 2026-05-31 retornam `true`; depois retornam `false`.
+**Resultado esperado:** datas até `to` (inclusive) retornam `true`;
+posteriores `false`.
 
 ### CT-REL-004 - `isWithinRange` com ISO datetime
 
-**Dados:** `2026-05-10T15:30:00.000Z`.
-
-**Resultado esperado:** compara apenas dia `2026-05-10`.
+**Resultado esperado:** considera apenas a parte de data (`YYYY-MM-DD`).
 
 ### CT-REL-005 - `summarizeAppointments`
 
-**Dados:** lista com todos os status, pacientes repetidas e encaminhamentos.
-
-**Resultado esperado:**
-
-- `total` igual ao tamanho.
-- `byStatus` correto.
-- `withReferral` conta somente `encaminhamento` não nulo.
-- `uniquePatients` conta IDs únicos.
+**Resultado esperado:** retorna `total`, `byStatus`, `withReferral` (somente
+encaminhamentos não nulos) e `uniquePatients` (IDs únicos).
 
 ### CT-REL-006 - `summarizeDonations`
 
-**Dados:** doações financeiras/material, pendente/confirmada/cancelada.
-
-**Resultado esperado:**
-
-- `byKind`, `byStatus` corretos.
-- `totalAmount` soma apenas financeiras com valor.
-- `uniqueDonors` conta doadores únicos.
+**Resultado esperado:** `byKind`, `byStatus`, `totalAmount` (soma apenas
+financeiras com `amount`) e `uniqueDonors`.
 
 ### CT-REL-007 - `summarizeVolunteerHours`
 
-**Dados:** registros de categorias diferentes e atividades repetidas.
-
-**Resultado esperado:**
-
-- Soma total de horas.
-- `uniqueActivities` remove duplicadas.
-- `byCategory` soma horas por categoria.
+**Resultado esperado:** total de horas, atividades únicas, e
+`byCategory` agregando horas por categoria.
 
 ### CT-REL-008 - `consolidateVolunteerHoursByVolunteer`
 
-**Dados:** registros de duas voluntárias, com datas e atividades distintas.
-
 **Resultado esperado:**
 
-- Agrupa por `volunteerName`.
-- Usa `(não atribuído)` quando nome ausente.
+- Agrupa por `volunteerName`; usa `(não atribuído)` quando vazio.
 - Ordena por total de horas decrescente.
-- Calcula período mínimo/máximo.
-- Atividades ordenadas alfabeticamente.
+- Calcula período (mín/máx de data) e ordena atividades alfabeticamente.
 
 ### CT-REL-009 - `buildCsv` com dados simples
 
-**Resultado esperado:** primeira linha contém cabeçalho separado por `;`; linhas seguintes contêm valores.
+**Resultado esperado:** primeira linha é o cabeçalho separado por `;`;
+linhas seguintes contêm os valores.
 
 ### CT-REL-010 - `buildCsv` escapa valores especiais
 
-**Dados:** valores com aspas, ponto e vírgula e quebra de linha.
+**Dados:** valores com aspas, ponto-e-vírgula ou quebra de linha.
 
-**Resultado esperado:** valor fica entre aspas e aspas internas são duplicadas.
+**Resultado esperado:** valor é envolvido em aspas duplas e aspas internas
+são duplicadas.
 
-### CT-REL-011 - `buildCsv` com null/undefined
+### CT-REL-011 - `buildCsv` com `null/undefined`
 
-**Resultado esperado:** células vazias.
+**Resultado esperado:** células ficam vazias.
 
 ### CT-REL-012 - `downloadCsv`
 
+**Resultado esperado:** cria `Blob` com BOM UTF-8, dispara download e revoga
+a URL temporária.
+
+### CT-REL-013 - `downloadPdfReport` (cabeçalho, resumo, seções)
+
 **Resultado esperado:**
 
-- Cria Blob com BOM UTF-8.
-- Dispara download.
-- Remove link temporário e revoga URL.
+- Sem seções, baixa PDF apenas com cabeçalho, título e período.
+- Com resumo: inclui tabela de indicadores.
+- Seção sem linhas: exibe `Sem registros no recorte atual.`
 
-### CT-REL-013 - `downloadPdfReport` sem seções
+### CT-REL-014 - Exportações do admin
 
-**Resultado esperado:** baixa PDF com cabeçalho, título e período.
+**Funções cobertas:** handlers do `AdminReports`.
 
-### CT-REL-014 - `downloadPdfReport` com resumo
+**Resultado esperado:**
 
-**Resultado esperado:** inclui tabela de indicadores.
+- CSV/PDF de atendimentos refletem filtros aplicados.
+- CSV/PDF de doações trazem valores corretos por kind/status.
+- CSV/PDF de horas trazem registros + consolidado por voluntária.
 
-### CT-REL-015 - `downloadPdfReport` com seção vazia
+### CT-REL-015 - Limpar filtros
 
-**Resultado esperado:** mostra `Sem registros no recorte atual.`
+**Resultado esperado:** período vazio, status `all`, kind `all`.
 
-### CT-REL-016 - Exportar atendimentos CSV/PDF
+### CT-REL-016 - Estados vazios
 
-**Funções cobertas:** `AdminReports.handleExportAppointmentsCsv/Pdf`
+**Resultado esperado:** seções sem dados mostram mensagem e os botões de
+exportar ficam desabilitados.
 
-**Resultado esperado:** arquivos contêm atendimentos filtrados e resumo correto.
+---
 
-### CT-REL-017 - Exportar doações CSV/PDF
-
-**Resultado esperado:** arquivos contêm doações filtradas, valores e status corretos.
-
-### CT-REL-018 - Exportar horas CSV/PDF
-
-**Resultado esperado:** arquivos contêm registros de horas e consolidado por voluntária.
-
-### CT-REL-019 - Limpar filtros
-
-**Funções cobertas:** `handleClearFilters`
-
-**Resultado esperado:** período vazio, status atendimento `all`, tipo/status de doação `all`.
-
-### CT-REL-020 - Estados vazios dos relatórios
-
-**Resultado esperado:** cada seção mostra mensagem de nenhum registro e botões de exportar ficam desabilitados.
-
-## Área do Doador
+## 11. Área do Doador
 
 ### CT-DOA-001 - Dashboard do doador
 
-**Funções cobertas:** `UserArea`, `DonorDashboard`, `DonorStats`
+**Funções cobertas:** `UserArea` (role doador), `DonorDashboard`,
+`DonorStats`.
 
 **Resultado esperado:**
 
-- Lista apenas doações de `DEMO_DONOR_ID`.
-- Total financeiro soma somente doações financeiras.
+- Lista somente doações com `donorId = doa-<sub>` (id derivado do JWT).
+- Total financeiro soma apenas `kind = "financeira"`.
 - Total de doações conta todas as contribuições.
 
 ### CT-DOA-002 - Abrir modal de nova doação
 
-**Funções cobertas:** `DonationModal`, `DonationChoice`
+**Funções cobertas:** `DonationModal`, `useBodyScrollLock`.
 
-**Resultado esperado:** modal abre no passo `escolha`.
+**Resultado esperado:** modal abre no passo `escolha`; o scroll do `body`
+fica travado enquanto aberto.
 
 ### CT-DOA-003 - Continuar sem escolher tipo
 
-**Resultado esperado:** botão continuar fica desabilitado ou não avança.
+**Resultado esperado:** botão `Continuar` desabilitado / não avança o step.
 
 ### CT-DOA-004 - Doação financeira válida
 
-**Funções cobertas:** `FinancialDonation`, `parseAmount`, `handleFinancialConfirm`
+**Funções cobertas:** `FinancialDonation`, `parseAmount` (CurrencyInput),
+`handleFinancialConfirm`.
 
-**Dados:** nome `Joao`, telefone `(47) 99999-9999`, valor `R$ 50,00`.
+**Dados:** nome, telefone, valor (`R$ 50,00`).
 
 **Resultado esperado:**
 
-- Cria doação `kind: "financeira"`, `status: "pendente"`.
-- `amount: 50`.
-- Gera `protocol` e `receiptIssuedAt`.
-- Vai para confirmação.
+- Cria doação `kind: "financeira"`, `status: "pendente"`, `amount: 50`.
+- Gera `protocol` (`buildDonationProtocol`) e `receiptIssuedAt = now`.
+- Avança para `confirmacao`.
 
 ### CT-DOA-005 - Doação financeira sem nome
 
@@ -898,208 +967,284 @@ Documento montado a partir da leitura do projeto em `src/` e `server/`.
 
 ### CT-DOA-007 - Valor financeiro vazio
 
-**Resultado esperado:** doação é criada com `amount: undefined`; histórico mostra `Valor a confirmar`.
+**Resultado esperado:** doação criada com `amount: undefined`; histórico
+mostra `A confirmar`/`Valor a confirmar`.
 
 ### CT-DOA-008 - Valor financeiro com vírgula
 
-**Dados:** `123,45`.
+**Resultado esperado:** `CurrencyInput.parseCurrencyInput("R$ 123,45")` →
+`123.45`.
 
-**Resultado esperado:** `amount: 123.45`.
+### CT-DOA-009 - QR Code Pix exibido
 
-### CT-DOA-009 - Copiar chave PIX
+**Funções cobertas:** `FinancialDonation` (imagem em
+`src/assets/qrCodePix.png`).
 
-**Funções cobertas:** `handleCopyPix`
+**Resultado esperado:** componente renderiza `<img>` com o QR Code dentro do
+quadro 36×36 (rounded-xl, fundo branco). Imagem é importada como módulo
+estático e empacotada pelo Vite.
 
-**Resultado esperado:** `navigator.clipboard.writeText` é chamado; label muda para `Copiado!` temporariamente.
+### CT-DOA-010 - Copiar chave PIX
 
-### CT-DOA-010 - Link WhatsApp
+**Funções cobertas:** `handleCopyPix`.
 
-**Resultado esperado:** link aponta para `https://wa.me/<número>?text=<mensagem>`.
+**Resultado esperado:** `navigator.clipboard.writeText` é chamado com a chave
+e o botão troca para `Copiado!` por 2 segundos.
 
-### CT-DOA-011 - Doação material válida
+### CT-DOA-011 - Link WhatsApp
 
-**Funções cobertas:** `MaterialDonation`, `handleMaterialConfirm`
+**Resultado esperado:** anchor aponta para
+`https://wa.me/<numero>?text=<mensagem>` com `target="_blank"` e
+`rel="noopener noreferrer"`.
 
-**Dados:** nome, telefone, tipo `higiene`, quantidade `10 unidades`, descrição, forma entrega `retirada`.
+### CT-DOA-012 - Doação financeira como terceiro
 
-**Resultado esperado:** cria doação material pendente com todos os campos preenchidos.
+**Funções cobertas:** checkbox `isThirdParty`, `handleFinancialConfirm`.
 
-### CT-DOA-012 - Doação material sem campos obrigatórios
+**Resultado esperado:**
 
-**Resultado esperado:** cada campo obrigatório vazio mostra `Campo obrigatório`.
+- `donorSource = "terceiro"`.
+- `thirdPartyName` e `thirdPartyPhone` recebem nome/telefone digitados.
+- `profileOwnerId` e `profileOwnerName` ficam com os dados do dono do perfil
+  (constantes `DEMO_DONOR_ID`/`DEMO_DONOR_NAME` em `domain/storage.ts`,
+  herdados para compatibilidade).
 
-### CT-DOA-013 - Formatar telefone
+### CT-DOA-013 - Doação material válida
 
-**Funções cobertas:** `formatPhoneBR`
+**Funções cobertas:** `MaterialDonation`, `handleMaterialConfirm`.
+
+**Dados:** nome, telefone, tipoItem (`higiene`), quantidade `10 unidades`,
+descrição, formaEntrega (`retirada`).
+
+**Resultado esperado:** cria doação `kind = "material"`, `status = "pendente"`
+com todos os campos preenchidos.
+
+### CT-DOA-014 - Doação material sem campos obrigatórios
+
+**Resultado esperado:** cada campo obrigatório vazio mostra mensagem
+correspondente (definida em `MaterialDonation`).
+
+### CT-DOA-015 - Doação material como terceiro
+
+**Resultado esperado:** mesmo comportamento de CT-DOA-012, aplicado ao
+fluxo de material.
+
+### CT-DOA-016 - `formatPhoneBR`
 
 **Dados e esperado:**
 
-- `47999999999` => `(47) 99999-9999`
-- `4733334444` => `(47) 3333-4444`
-- letras e símbolos são removidos.
+- `47999999999` → `(47) 99999-9999`
+- `4733334444` → `(47) 3333-4444`
+- caracteres não numéricos são removidos.
 
-### CT-DOA-014 - Histórico ordenado
+### CT-DOA-017 - Histórico ordenado
 
-**Funções cobertas:** `DonorHistory`
+**Funções cobertas:** `DonorHistory`.
 
 **Resultado esperado:** doações ordenadas por `date` decrescente.
 
-### CT-DOA-015 - Título de doação financeira com campanha
+### CT-DOA-018 - Títulos de doações
 
-**Funções cobertas:** `renderDonationTitle`
+**Funções cobertas:** `renderDonationTitle`.
 
-**Resultado esperado:** remove sufixo ` 2025` e mostra `Doação para <campanha>`.
+**Resultado esperado:**
 
-### CT-DOA-016 - Título de doação de cabelo
+- Financeira com campanha: remove sufixo ` 2025` e mostra
+  `Doação para <campanha>`.
+- Cabelo: `Doação de cabelo`.
 
-**Resultado esperado:** mostra `Doação de cabelo`.
+### CT-DOA-019 - Status de material
 
-### CT-DOA-017 - Status material confirmada
+**Funções cobertas:** `renderDonationStatus`.
 
-**Funções cobertas:** `renderDonationStatus`
+**Resultado esperado:** cabelo confirmada mostra `Processada`; outro material
+confirmado mostra `Recebida`.
 
-**Resultado esperado:** cabelo confirmada mostra `Processada`; outro material confirmado mostra `Recebida`.
+### CT-DOA-020 - Comprovante disponível
 
-### CT-DOA-018 - Comprovante disponível
+**Funções cobertas:** `DonationReceiptModal`.
 
-**Funções cobertas:** `DonationReceiptModal`
+**Resultado esperado:** botão `Comprovante` habilitado para doações
+financeiras com `protocol`; modal exibe protocolo, data, doador, telefone,
+tipo, valor, campanha e status.
 
-**Dados:** doação financeira com `protocol`.
+### CT-DOA-021 - Comprovante indisponível
 
-**Resultado esperado:** botão `Comprovante` habilitado e modal exibe protocolo, emitido em, doador, telefone, tipo, valor, campanha e status.
+**Resultado esperado:** doação sem `protocol` (ou material) tem o botão
+desabilitado.
 
-### CT-DOA-019 - Comprovante indisponível
+### CT-DOA-022 - Baixar comprovante PDF
 
-**Dados:** doação material ou financeira sem protocolo.
+**Funções cobertas:** `DonationReceiptModal.handleDownloadPdf`.
 
-**Resultado esperado:** botão de comprovante fica desabilitado.
+**Resultado esperado:** gera arquivo `comprovante-<protocolo>.pdf`.
 
-### CT-DOA-020 - Baixar comprovante PDF
+---
 
-**Funções cobertas:** `DonationReceiptModal.handleDownloadPdf`
-
-**Resultado esperado:** gera PDF `comprovante-<protocolo>.pdf`.
-
-## Formatadores e UI Básica
+## 12. Formatadores e UI Básica
 
 ### CT-UTIL-001 - `formatCurrencyBRL`
 
-**Dados:** `0`, `50`, `1234.56`.
-
-**Resultado esperado:** valores em `pt-BR` com moeda BRL.
+**Resultado esperado:** `0`, `50`, `1234.56` formatados em `pt-BR` BRL.
 
 ### CT-UTIL-002 - `formatDateTimeBR`
 
-**Dados:** ISO válido.
+**Resultado esperado:** ISO válido → data/hora em `pt-BR`; ISO inválido
+retorna texto original sem quebrar.
 
-**Resultado esperado:** data/hora formatada em `pt-BR`; ISO inválido retorna texto original ou não quebra.
+### CT-UTIL-003 - `formatDateBR` (`patient-utils`)
 
-### CT-UTIL-003 - `patient-utils.formatDateBR`
+**Resultado esperado:** `2026-05-23` → `23/05/2026`.
 
-**Dados:** `2026-05-23`.
+### CT-UTIL-004 - `formatPhoneBR` / `formatCpf` / `normalizeCpf`
 
-**Resultado esperado:** `23/05/2026`.
+**Resultado esperado:** formatação correta para telefone (8 ou 9 dígitos +
+DDD) e CPF (`000.000.000-00`); `normalizeCpf` remove tudo que não é dígito.
 
-### CT-UTIL-004 - `patient-utils.formatDateTimeBR`
+### CT-UI-001 - `cn` (merge de classes)
 
-**Dados:** ISO datetime.
-
-**Resultado esperado:** data e hora em formato brasileiro.
-
-### CT-UI-001 - `cn`
-
-**Funções cobertas:** `cn`
-
-**Dados:** classes condicionais conflitantes, ex. `p-2`, `p-4`.
-
-**Resultado esperado:** merge remove conflito e mantém classe final esperada.
+**Resultado esperado:** mantém apenas a última classe conflitante
+(`tailwind-merge`), preserva classes condicionais.
 
 ### CT-UI-002 - `Button`
 
-**Resultado esperado:** renderiza variantes, tamanhos, disabled e `asChild` sem perder classes.
+**Resultado esperado:** variantes/tamanhos/`disabled`/`asChild` funcionam
+sem perder classes.
 
 ### CT-UI-003 - `Badge`
 
-**Resultado esperado:** renderiza variantes default/secondary/destructive/outline.
+**Resultado esperado:** variantes `default/secondary/destructive/outline`.
 
 ### CT-UI-004 - `Card` e subcomponentes
 
-**Resultado esperado:** cada subcomponente aplica classes e repassa props.
+**Resultado esperado:** cada subcomponente aplica suas classes e repassa
+props.
 
 ### CT-UI-005 - `Dialog`
 
 **Resultado esperado:**
 
 - Não renderiza quando `open=false`.
-- Renderiza título, descrição, conteúdo e botão fechar quando `open=true`.
-- Clique no fechar chama `onClose`.
+- Renderiza título, descrição, conteúdo e botão de fechar quando `open=true`.
+- Clique no botão de fechar invoca `onClose`.
 
-### CT-UI-006 - `Input` e `Textarea`
+### CT-UI-006 - `Input` / `Textarea`
 
-**Resultado esperado:** repassam props nativas, `className` extra e estados `disabled/required`.
+**Resultado esperado:** repassam props nativas, `className` extra e estados
+`disabled/required`.
 
 ### CT-UI-007 - `Select`
 
-**Resultado esperado:** trigger abre lista; selecionar item chama `onValueChange`.
+**Resultado esperado:** trigger abre lista; selecionar item dispara
+`onValueChange`.
 
-## Backend - Rotas Protegidas
+### CT-UI-008 - `Checkbox`
 
-### CT-BE-001 - `GET /api/patients`
+**Resultado esperado:** estado controlado, `onChange` dispara com `checked`
+correto.
 
-**Resultado esperado:** admin/voluntária recebem lista; demais recebem `403`.
+### CT-UI-009 - `CurrencyInput`
 
-### CT-BE-002 - `PUT /api/patients`
+**Resultado esperado:** formata a entrada como `R$ X.XXX,YY`;
+`parseCurrencyInput` devolve número ou `undefined` para entradas vazias.
 
-**Resultado esperado:** admin/voluntária salvam; demais recebem `403`.
+### CT-UI-010 - `DatePicker`
 
-### CT-BE-003 - `GET/PUT /api/appointments`
+**Funções cobertas:** `DatePicker` em `ui/date-time-picker.tsx`.
 
-**Resultado esperado:** admin/voluntária/paciente acessam; doador recebe `403`.
+**Resultado esperado:**
 
-### CT-BE-004 - `GET/PUT /api/notifications`
+- Abre calendário ao clicar.
+- `value`/`onChange` no formato `YYYY-MM-DD`.
+- `fromYear`/`toYear` limitam o seletor de ano.
+- `required` evita submit do form vazio.
 
-**Resultado esperado:** todos listam; somente admin/voluntária/paciente salvam.
+### CT-UI-011 - `TimePicker`
 
-### CT-BE-005 - `GET/PUT /api/donations`
+**Resultado esperado:** seleciona horário no formato `HH:mm` e dispara
+`onChange`.
 
-**Resultado esperado:** admin/doador acessam; paciente/voluntária recebem `403`.
+### CT-UI-012 - `useBodyScrollLock`
 
-### CT-BE-006 - `GET/PUT /api/users`
+**Resultado esperado:** quando ativo, fixa o `overflow` do `body`; ao
+desligar, restaura o estado anterior.
 
-**Resultado esperado:** somente admin acessa; novo usuário recebe hash padrão.
+---
 
-### CT-BE-007 - `GET /api/campaigns`
+## 13. Backend - Rotas Protegidas (resumo de permissões)
 
-**Resultado esperado:** usuários autenticados recebem campanhas.
+| Endpoint                                      | Método | Quem pode chamar                                |
+|-----------------------------------------------|--------|-------------------------------------------------|
+| `/api/health`                                 | GET    | público                                         |
+| `/api/auth/login`                             | POST   | público                                         |
+| `/api/auth/register`                          | POST   | público                                         |
+| `/api/auth/change-password`                   | POST   | qualquer papel autenticado                      |
+| `/api/patients`                               | GET/PUT| admin, voluntaria                               |
+| `/api/patients/profile` (GET)                 | GET    | paciente (próprio), admin, voluntaria           |
+| `/api/patients/profile` (PUT)                 | PUT    | paciente (próprio), admin (com `userId`)        |
+| `/api/appointments`                           | GET/PUT| admin, voluntaria, paciente                     |
+| `/api/notifications`                          | GET    | todos os papéis                                 |
+| `/api/notifications`                          | PUT    | admin, voluntaria, paciente                     |
+| `/api/donations`                              | GET/PUT| admin, doador                                   |
+| `/api/users`                                  | GET/PUT| admin                                           |
+| `/api/users/:id`                              | GET/PUT| qualquer papel autenticado                      |
+| `/api/campaigns`                              | GET    | todos os papéis                                 |
+| `/api/sectors`                                | GET    | todos os papéis                                 |
+| `/api/volunteer-hours`                        | GET/PUT| admin, voluntaria                               |
+| `/api/volunteer-agenda`                       | GET    | admin, voluntaria                               |
+| `/api/volunteer-agenda`                       | POST   | admin (broadcast para voluntárias)              |
+| `/api/volunteer-agenda/:id`                   | PUT    | admin                                           |
+| `/api/volunteer-agenda/:id`                   | DELETE | admin                                           |
+| `/api/volunteer-agenda/:id/claim`             | POST   | voluntaria (notifica admins)                    |
+| `/api/uploads`                                | POST   | qualquer papel autenticado                      |
 
-### CT-BE-008 - `GET /api/sectors`
+### CT-BE-001 a CT-BE-008
 
-**Resultado esperado:** usuários autenticados recebem setores.
+Validar matriz acima: para cada combinação `(role × endpoint)`, papéis fora
+da coluna `Quem pode chamar` recebem `403` com
+`Você não tem permissão para esta ação.`; chamadas sem token retornam `401`.
 
-### CT-BE-009 - `GET/PUT /api/volunteer-hours`
+---
 
-**Resultado esperado:** admin/voluntária acessam; paciente/doador recebem `403`.
-
-### CT-BE-010 - `GET /api/volunteer-agenda`
-
-**Resultado esperado:** admin/voluntária acessam; paciente/doador recebem `403`.
-
-## Build e Qualidade
+## 14. Build e Qualidade
 
 ### CT-QA-001 - Typecheck
 
-**Passos:** rodar `npm run typecheck`.
+**Passos:** `npm run typecheck`.
 
 **Resultado esperado:** comando termina com exit code `0`.
 
 ### CT-QA-002 - Build de produção
 
-**Passos:** rodar `npm run build`.
+**Passos:** `npm run build`.
 
-**Resultado esperado:** Vite gera `dist/` sem erros.
+**Resultado esperado:** Vite gera `dist/` sem erros (incluindo o asset
+`qrCodePix.png` referenciado pelo `FinancialDonation`).
 
-### CT-QA-003 - Seed
+### CT-QA-003 - Dev concorrente
 
-**Passos:** rodar `npm run seed`.
+**Passos:** `npm run dev`.
 
-**Resultado esperado:** `server/data/app-data.json` é recriado com dados consistentes.
+**Resultado esperado:** `concurrently` sobe Vite (`5173`) e o servidor
+Fastify (`3001`); o front consegue chamar a API via proxy `/api` e
+`/uploads`.
+
+---
+
+## 15. Itens NÃO implementados (em relação ao documento anterior)
+
+Para evitar testes inválidos, observe que o sistema atual **não possui**:
+
+- `npm run seed` ou script de reset de base — a base agora é MySQL e não há
+  ferramenta de seed embutida no projeto.
+- `ensureDataFile`, `readStore`, `writeStore`, `resetStore`,
+  `buildSeedData` — removidos junto com o JSON store antigo.
+- Login direto pelas contas demo `admin@exemplo.com`,
+  `voluntario@exemplo.com`, `paciente@exemplo.com`, `doador@exemplo.com`
+  com senha fixa `123`. Hoje o login depende dos usuários existentes na
+  tabela `usuarios`. As constantes `DEMO_*` em `src/domain/storage.ts` e
+  `src/domain/demo.ts` ainda existem, mas servem apenas como rótulos para
+  doações criadas sem perfil real associado.
+- Aba `campanhas` clicável no painel admin: o tipo `AdminTab` ainda inclui
+  `"campaigns"`, porém o grid de botões só lista `Usuários`, `Doações`,
+  `Atividades` e `Relatórios`.
