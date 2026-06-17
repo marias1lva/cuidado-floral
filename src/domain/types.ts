@@ -17,6 +17,24 @@ export interface Patient {
   symptoms: string;
 }
 
+export type FamilyHistory = "sim" | "nao" | "nao_sei";
+
+// Perfil consolidado da paciente (combinação de usuarios + pacientes).
+// Trafegado por GET/PUT /api/patients/profile.
+export interface PatientProfile {
+  userId: number;
+  patientId: string;
+  name: string;
+  email: string;
+  cpf: string;
+  phone: string;
+  birthDate?: string; // YYYY-MM-DD
+  city?: string;
+  district?: string;
+  familyHistory?: FamilyHistory;
+  symptoms?: string;
+}
+
 export type AppointmentStatus =
   | "agendado"
   | "em_andamento"

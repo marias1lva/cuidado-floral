@@ -172,6 +172,8 @@ export function VolunteerHoursModal({
             <DatePicker
               value={form.date}
               max={maxDate}
+              fromYear={new Date().getFullYear() - 2}
+              toYear={new Date().getFullYear()}
               onChange={(value) => setField("date", value)}
               aria-invalid={Boolean(errors.date)}
               className="rounded-2xl border-pink-200 bg-[var(--input-background)]"

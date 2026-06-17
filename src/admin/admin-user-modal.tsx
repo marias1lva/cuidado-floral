@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
+import { formatCpf, normalizeCpf } from "../lib/cpf-format";
 import type { ManagedUser, ManagedUserRole } from "./types";
 
 interface AdminUserModalProps {
@@ -20,6 +21,7 @@ interface AdminUserModalProps {
     email: string;
     cpf: string;
     type: ManagedUserRole;
+    password?: string;
   }) => void;
   existingUsers: ManagedUser[];
   editingUser?: ManagedUser | null;
@@ -30,6 +32,7 @@ interface UserFormState {
   email: string;
   cpf: string;
   type: ManagedUserRole;
+  password: string;
 }
 
 const initialFormState: UserFormState = {
@@ -37,19 +40,8 @@ const initialFormState: UserFormState = {
   email: "",
   cpf: "",
   type: "paciente",
+  password: "",
 };
-
-function normalizeCpf(value: string) {
-  return value.replace(/\D/g, "");
-}
-
-function formatCpf(value: string) {
-  const cpfDigits = normalizeCpf(value).slice(0, 11);
-  return cpfDigits
-    .replace(/(\d{3})(\d)/, "$1.$2")
-    .replace(/(\d{3})(\d)/, "$1.$2")
-    .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
-}
 
 function formatRoleLabel(role: ManagedUserRole) {
   if (role === "voluntaria") {
@@ -92,6 +84,7 @@ export function AdminUserModal({
       email: editingUser.email,
       cpf: editingUser.cpf,
       type: editingUser.type,
+      password: "",
     });
     setErrors({});
   }, [open, editingUser]);
@@ -148,6 +141,10 @@ export function AdminUserModal({
       nextErrors.cpf = "Já existe um usuário com este CPF.";
     }
 
+    if (!editingUser && form.password.length < 6) {
+      nextErrors.password = "Senha deve ter ao menos 6 caracteres.";
+    }
+
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   }
@@ -163,6 +160,7 @@ export function AdminUserModal({
       email: form.email.trim().toLowerCase(),
       cpf: formatCpf(form.cpf),
       type: form.type,
+      ...(editingUser ? {} : { password: form.password }),
     });
     handleClose();
   }
@@ -242,6 +240,23 @@ export function AdminUserModal({
             </Select>
           </FormField>
         </div>
+
+        {!editingUser && (
+          <FormField label="Senha provisória" error={errors.password}>
+            <Input
+              type="password"
+              value={form.password}
+              onChange={(event) => setField("password", event.target.value)}
+              placeholder="Mínimo 6 caracteres"
+              autoComplete="new-password"
+              aria-invalid={Boolean(errors.password)}
+              className="rounded-2xl border-pink-200 bg-[var(--input-background)]"
+            />
+            <span className="mt-1 block text-xs text-[var(--muted-foreground)]">
+              Informe esta senha ao novo usuário para que ele consiga entrar.
+            </span>
+          </FormField>
+        )}
 
         <div className="flex flex-col-reverse gap-3 border-t border-pink-100 pt-5 sm:flex-row sm:justify-end">
           <Button

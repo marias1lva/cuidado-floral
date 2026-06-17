@@ -18,10 +18,31 @@ export interface VolunteerHourEntry {
   createdAt: string;
 }
 
+export type VolunteerAgendaStatus =
+  | "aberta"
+  | "atribuida"
+  | "concluida"
+  | "cancelada";
+
 export interface VolunteerAgendaItem {
   id: number;
   title: string;
+  description?: string;
   date: string;
   shift: string;
   location: string;
+  estimatedDuration?: string; // texto livre, ex.: "2h", "3h30"
+  status: VolunteerAgendaStatus;
+  volunteerId?: number;
+  volunteerName?: string;
+}
+
+// Payload de criação (sem id, status default aberta).
+export interface VolunteerAgendaCreate {
+  title: string;
+  description?: string;
+  date: string;
+  shift: string;
+  location: string;
+  estimatedDuration?: string;
 }

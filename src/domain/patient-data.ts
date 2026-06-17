@@ -3,6 +3,7 @@ import type {
   Appointment,
   AppNotification,
   AppointmentAttachment,
+  PatientProfile,
 } from "./types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
@@ -40,6 +41,24 @@ export function saveNotifications(
   return apiRequest<AppNotification[]>("/notifications", {
     method: "PUT",
     body: JSON.stringify(items),
+  });
+}
+
+export function loadPatientProfile(userId?: number): Promise<PatientProfile> {
+  const qs = userId ? `?userId=${userId}` : "";
+  return apiRequest<PatientProfile>(`/patients/profile${qs}`);
+}
+
+export function savePatientProfile(
+  profile: PatientProfile,
+): Promise<PatientProfile> {
+  // CPF e patientId nunca trafegam no PUT (CPF não é editável; patientId vem do JOIN).
+  const { cpf: _cpf, patientId: _pid, ...body } = profile;
+  void _cpf;
+  void _pid;
+  return apiRequest<PatientProfile>("/patients/profile", {
+    method: "PUT",
+    body: JSON.stringify(body),
   });
 }
 
