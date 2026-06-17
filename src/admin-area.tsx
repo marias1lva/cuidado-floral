@@ -53,12 +53,7 @@ import {
   notificationTypeLabel,
 } from "./user-area/patient/patient-utils";
 
-type AdminTab =
-  | "users"
-  | "campaigns"
-  | "donations"
-  | "activities"
-  | "reports";
+type AdminTab = "users" | "campaigns" | "donations" | "activities" | "reports";
 
 function getTodayDateLabel() {
   return new Intl.DateTimeFormat("pt-BR").format(new Date());
@@ -569,11 +564,6 @@ export function AdminArea({ onLogout }: AdminAreaProps) {
             isActive={activeTab === "donations"}
             label="Doações"
             onClick={() => setActiveTab("donations")}
-          />
-          <TabButton
-            isActive={activeTab === "campaigns"}
-            label="Campanhas"
-            onClick={() => setActiveTab("campaigns")}
           />
           <TabButton
             isActive={activeTab === "activities"}
